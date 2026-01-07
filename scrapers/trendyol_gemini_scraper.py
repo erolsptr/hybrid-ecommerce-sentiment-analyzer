@@ -13,7 +13,7 @@ load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 MODEL_NAME = "gemini-3-flash-preview" 
 
-# --- OPTİMİZASYON 1: Batch Size Artırıldı ---
+# --- OPTİMİZASYON: Senin belirlediğin ayarlar ---
 BATCH_SIZE = 100
 
 def parse_style_padding_to_rating(style_text):
@@ -36,7 +36,7 @@ def call_gemini_api(partial_comments):
     Sen bir e-ticaret yorum analistisin. Aşağıdaki yorumları analiz et.
     
     KURALLAR:
-    1. Analizlerini KESİNLİKLE sadece şu ana kategoriler altında topla (Başka kategori uydurma):
+    1. Analizlerini KESİNLİKLE sadece şu ana kategoriler altında topla:
        - "Kargo ve Teslimat"
        - "Paketleme"
        - "Ürün Kalitesi ve Malzeme"
@@ -50,8 +50,7 @@ def call_gemini_api(partial_comments):
        - "Performans ve İşlevsellik"
     
     2. Eğer bir yorum bu kategorilerden hiçbirine girmiyorsa "Diğer" altına al.
-    3. Konuları eşleştirirken akıllı davran: "Kırık geldi", "bozuldu", "çalışmıyor" -> "Dayanıklılık ve Arıza"; "Geç geldi" -> "Kargo ve Teslimat".
-    4. Cevabı SADECE aşağıdaki JSON formatında ver.
+    3. Cevabı SADECE aşağıdaki JSON formatında ver.
 
     YORUMLAR:
     {tum_yorumlar_metni}
@@ -71,7 +70,6 @@ def call_gemini_api(partial_comments):
     
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     
-    # --- OPTİMİZASYON 2: Hata Bekleme Süresi Kısaltıldı ---
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -88,18 +86,14 @@ def call_gemini_api(partial_comments):
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:
-                # Bekleme süresini düşürdük: 10sn, 20sn, 30sn
                 wait_time = 10 + (attempt * 10) 
                 print(f"⚠️ API Kotası (429). {wait_time}sn bekleniyor... (Deneme {attempt+1}/{max_retries})")
                 time.sleep(wait_time)
             else:
-                print(f"API Hatası (Kritik): {e}")
                 return {"konu_analizleri": []}
         except Exception as e:
-            print(f"Beklenmeyen hata: {e}")
             return {"konu_analizleri": []}
     
-    print("Maksimum deneme sayısına ulaşıldı, bu paket atlanıyor.")
     return {"konu_analizleri": []}
 
 def merge_results(results_list):
@@ -121,13 +115,10 @@ def merge_results(results_list):
             else:
                 final_dict["konu_analizleri"].append(item)
                 topic_map[konu_adi] = len(final_dict["konu_analizleri"]) - 1
-    
     return final_dict
 
 def analyze_batch_with_gemini(yorum_listesi):
-    if not GOOGLE_API_KEY or " " in GOOGLE_API_KEY:
-        print("KRİTİK HATA: Google API Anahtarı bulunamadı! .env dosyasını kontrol edin.")
-        return {"hata": "API Anahtarı eksik."}
+    if not GOOGLE_API_KEY: return {"hata": "API Anahtarı eksik."}
 
     print(f"Toplam {len(yorum_listesi)} yorum analiz edilecek. {BATCH_SIZE}'arlı paketler halinde gönderiliyor...")
     
@@ -135,13 +126,11 @@ def analyze_batch_with_gemini(yorum_listesi):
     for i in range(0, len(yorum_listesi), BATCH_SIZE):
         batch = yorum_listesi[i:i + BATCH_SIZE]
         print(f"   -> Paket işleniyor: {i} - {i + len(batch)} arası...")
-        batch_result = call_gemini_api(batch)
-        all_results.append(batch_result)
         
-        # --- OPTİMİZASYON 3: Proaktif Bekleme ---
-        # Hata almayı beklemek yerine, her başarılı istekten sonra 4 saniye nefes aldırıyoruz.
-        # Bu sayede 429 hatasına düşme ihtimalimiz %90 azalır.
-        if i + BATCH_SIZE < len(yorum_listesi): # Son pakette beklemeye gerek yok
+        batch_result = call_gemini_api(batch)
+        if batch_result: all_results.append(batch_result)
+        
+        if i + BATCH_SIZE < len(yorum_listesi):
             print("   (API soğutuluyor: 4sn)...")
             time.sleep(4) 
 
@@ -149,67 +138,85 @@ def analyze_batch_with_gemini(yorum_listesi):
     return merge_results(all_results)
 
 def cek(driver, url, limit):
-    print("Trendyol GEMINI Scraper (Secure Key + Optimized) başlatıldı...")
-    
+    print("Trendyol GEMINI Scraper (Veritabanı Uyumlu) başlatıldı...")
     cekilen_veriler = []
     cekilen_yorum_metinleri = set()
+    urun_basligi = "Bilinmeyen Trendyol Ürünü" # Varsayılan başlık
 
     try:
         driver.get(url)
         time.sleep(3)
+        
+        # Popup Kapatıcılar
+        try: driver.find_element(By.ID, "onetrust-accept-btn-handler").click(); time.sleep(1)
+        except: pass
+        try: driver.find_element(By.CLASS_NAME, "onboarding__default-renderer-primary-button").click(); time.sleep(1)
+        except: pass
+
+        # --- DÜZELTİLEN BAŞLIK ÇEKME KISMI ---
         try:
-            cerez_kabul_butonu = driver.find_element(By.ID, "onetrust-accept-btn-handler")
-            driver.execute_script("arguments[0].click();", cerez_kabul_butonu); print("Çerez banner'ı kapatıldı."); time.sleep(1)
-        except Exception: pass
-        try:
-            anladim_butonu = driver.find_element(By.CLASS_NAME, "onboarding__default-renderer-primary-button")
-            anladim_butonu.click(); print("'Anladım' butonuna tıklandı."); time.sleep(1)
-        except Exception: pass
+            # Senin gönderdiğin: <h1 class="product-title variant-pdp"...>
+            # En güvenli yol: 'product-title' sınıfını kullanmak
+            baslik_elementi = driver.find_element(By.CLASS_NAME, "product-title")
+            urun_basligi = baslik_elementi.text.strip()
+            print(f"Ürün Başlığı: {urun_basligi}")
+        except:
+            # Yedek plan (Eski yapı)
+            try:
+                marka = driver.find_element(By.CLASS_NAME, "pr-new-br").text
+                ad = driver.find_element(By.CLASS_NAME, "pr-nm").text
+                urun_basligi = f"{marka} {ad}"
+                print(f"Ürün Başlığı (Yedek): {urun_basligi}")
+            except:
+                print("Başlık çekilemedi.")
+        # -------------------------------------
+
+        # Yorum Sayfasına Git
         if "/yorumlar" not in driver.current_url:
             try:
-                degerlendirmeler_butonu = driver.find_element(By.CLASS_NAME, "reviews-summary-reviews-detail")
-                driver.execute_script("arguments[0].scrollIntoView(true);", degerlendirmeler_butonu)
-                time.sleep(1); degerlendirmeler_butonu.click(); print("Değerlendirmeler sayfasına geçildi."); time.sleep(3)
+                btn = driver.find_element(By.CLASS_NAME, "reviews-summary-reviews-detail")
+                driver.execute_script("arguments[0].scrollIntoView(true);", btn)
+                time.sleep(1); btn.click(); time.sleep(3)
             except NoSuchElementException: return {"hata": "Değerlendirmeler butonu bulunamadı."}
         
+        # Infinite Scroll
         print(f"Akıllı kaydırma başladı (Hedef: {limit} yorum)...")
-        son_kart_sayisi = 0
+        son_sayi = 0
         while len(cekilen_yorum_metinleri) < limit:
-            kart_elementleri = driver.find_elements(By.CSS_SELECTOR, ".review, .review-card")
-            if len(kart_elementleri) == son_kart_sayisi and len(kart_elementleri) > 0:
-                print("Sayfanın sonuna ulaşıldı."); break
-            son_kart_sayisi = len(kart_elementleri)
+            karts = driver.find_elements(By.CSS_SELECTOR, ".review, .review-card")
+            if len(karts) == son_sayi and len(karts) > 0: break
+            son_sayi = len(karts)
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);"); time.sleep(2)
         
-        kart_elementleri = driver.find_elements(By.CSS_SELECTOR, ".review, .review-card")
-        
-        for kart in kart_elementleri:
+        # Verileri Topla
+        karts = driver.find_elements(By.CSS_SELECTOR, ".review, .review-card")
+        for kart in karts:
             try:
-                yorum_metni_elementi = kart.find_elements(By.CLASS_NAME, "review-comment")
-                if not yorum_metni_elementi: continue
-                yorum_metni = yorum_metni_elementi[0].text
-                if not yorum_metni or yorum_metni in cekilen_yorum_metinleri: continue
-                devamini_oku_buton = kart.find_elements(By.CLASS_NAME, "read-more")
-                if devamini_oku_buton:
-                    driver.execute_script("arguments[0].click();", devamini_oku_buton[0]); time.sleep(0.5)
-                    yorum_metni = kart.find_element(By.CLASS_NAME, "review-comment").text
-                star_div = kart.find_element(By.CLASS_NAME, "star-rating-full-star")
-                style_attributu = star_div.get_attribute('style')
-                puan = parse_style_padding_to_rating(style_attributu)
-                if yorum_metni:
-                    cekilen_veriler.append({'puan': puan, 'yorum': yorum_metni})
-                    cekilen_yorum_metinleri.add(yorum_metni)
-            except Exception:
-                continue
-        
-        print(f"Trendyol'dan toplam {len(cekilen_veriler)} adet veri çekildi. Şimdi toplu analiz başlıyor...")
-        if not cekilen_veriler:
-            return {"hata": "Analiz edilecek yorum bulunamadı."}
+                metin_el = kart.find_elements(By.CLASS_NAME, "review-comment")
+                if not metin_el: continue
+                metin = metin_el[0].text
+                if not metin or metin in cekilen_yorum_metinleri: continue
+                
+                try: # "Devamını oku" varsa tıkla
+                    more = kart.find_elements(By.CLASS_NAME, "read-more")
+                    if more: driver.execute_script("arguments[0].click();", more[0]); metin = kart.find_element(By.CLASS_NAME, "review-comment").text
+                except: pass
 
-        final_summary = analyze_batch_with_gemini(cekilen_veriler)
-        final_summary["analiz_edilen_yorum_sayisi"] = len(cekilen_veriler)
-        return final_summary
+                style = kart.find_element(By.CLASS_NAME, "star-rating-full-star").get_attribute('style')
+                puan = parse_style_padding_to_rating(style)
+                
+                cekilen_veriler.append({'puan': puan, 'yorum': metin})
+                cekilen_yorum_metinleri.add(metin)
+            except: continue
+        
+        print(f"Trendyol'dan toplam {len(cekilen_veriler)} yorum çekildi.")
+        
+        # Sözlük döndürüyoruz
+        return {
+            "baslik": urun_basligi,
+            "yorumlar": cekilen_veriler
+        }
 
     except Exception as e:
-        print(f"Trendyol Gemini scraper'da bir hata oluştu: {e}")
-        return {"hata": f"Bir hata oluştu: {e}"}
+        print(f"Hata: {e}")
+        return {"baslik": urun_basligi, "yorumlar": [], "hata": str(e)}
