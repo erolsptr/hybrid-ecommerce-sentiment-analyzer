@@ -7,36 +7,111 @@ import json
 import os
 import random
 
-# Tüm motorlarımızı import ediyoruz
-from scrapers.trendyol_scraper import cek as trendyol_bert_cek
+# --- IMPORTLAR ---
+# BERT Analiz Fonksiyonunu (analyze_aspects...) buraya dahil ediyoruz
+from scrapers.trendyol_scraper import cek as trendyol_bert_cek, analyze_aspects_with_finetuned_model
 from scrapers.trendyol_gemini_scraper import cek as trendyol_gemini_cek
-from scrapers.hepsiburada_scraper import cek as hepsiburada_cek
+from scrapers.trendyol_gemini_scraper import analyze_batch_with_gemini 
+from scrapers.n11_scraper import cek as n11_cek
 from scrapers.veri_toplayici import topla as veri_toplayici_cek
-from scrapers.hibrit_scraper import cek as hibrit_cek # Hibrit motoru ARTIK AKTİF
+from scrapers.hibrit_scraper import cek as hibrit_cek
 
 app = Flask(__name__)
-YORUM_LIMITI_ANALIZ = 100
-YORUM_LIMITI_TOPLA = 100
+YORUM_LIMITI_ANALIZ = 500
+YORUM_LIMITI_TOPLA = 500
 JSON_DOSYA_YOLU = "yorumlar.json"
 ETIKET_DOSYA_YOLU = "etiketler.json"
 
 def ana_yorum_cekici(url, motor_tipi):
     motor = None
-    if "trendyol.com" in url:
-        if motor_tipi == 'gemini': motor = trendyol_gemini_cek
-        elif motor_tipi == 'hibrit': motor = hibrit_cek # Hibrit seçenek artık çalışıyor
-        else: motor = trendyol_bert_cek
-    elif "hepsiburada.com" in url: motor = hepsiburada_cek
-    if not motor: return {"hata": "Desteklenmeyen site."}
+    site_tipi = ""
     
-    print(f"Selenium WebDriver başlatılıyor ({motor_tipi} motoru)...")
+    if "trendyol.com" in url:
+        site_tipi = "trendyol"
+        if motor_tipi == 'gemini': motor = trendyol_gemini_cek
+        elif motor_tipi == 'hibrit': motor = hibrit_cek
+        else: motor = trendyol_bert_cek
+        
+    elif "n11.com" in url:
+        site_tipi = "n11"
+        pass
+        
+    elif "hepsiburada.com" in url:
+        return [{"hata": "Hepsiburada şu an bakımda. Lütfen Trendyol veya N11 deneyin."}]
+    
+    if not site_tipi: return {"hata": "Desteklenmeyen site. (Sadece Trendyol ve N11)"}
+    
+    print(f"Selenium WebDriver başlatılıyor ({motor_tipi} motoru - {site_tipi})...")
     chrome_options = Options();
     # chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu"); chrome_options.add_argument("window-size=1920,1080")
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+    
     try:
-        sonuclar = motor(driver, url, YORUM_LIMITI_ANALIZ)
-        return sonuclar
+        # --- TRENDYOL İŞLEYİŞİ ---
+        if site_tipi == "trendyol":
+            sonuclar = motor(driver, url, YORUM_LIMITI_ANALIZ)
+            return sonuclar
+            
+        # --- N11 İŞLEYİŞİ (GÜNCELLENDİ: BERT ENTEGRASYONU) ---
+        elif site_tipi == "n11":
+            # 1. Ham Verileri Çek
+            ham_veriler = n11_cek(driver, url, YORUM_LIMITI_ANALIZ)
+            
+            if not ham_veriler or (isinstance(ham_veriler, list) and ham_veriler and "hata" in ham_veriler[0]):
+                return ham_veriler
+            
+            # 2. HİBRİT MOD (BERT + GEMINI)
+            if motor_tipi == 'hibrit':
+                print(f"N11 verileri ({len(ham_veriler)} adet) için HİBRİT süreç başlıyor...")
+                
+                # ADIM 2.1: BERT ile Ön Analiz
+                print("Adım 1/2: BERT Modeli yorumları tarıyor...")
+                gemini_icin_hazirlanan_veriler = []
+                
+                for veri in ham_veriler:
+                    try:
+                        # Kendi eğittiğimiz BERT modelini çağırıyoruz
+                        bert_sonucu = analyze_aspects_with_finetuned_model(veri['yorum'])
+                        
+                        # BERT sonuçlarını Gemini'ye "İpucu" olarak metne ekliyoruz
+                        ipucu_metni = ""
+                        if bert_sonucu:
+                            ipucu_metni = f" (Yapay Zeka Notu: Bu yorumda şu özellikler tespit edildi: {bert_sonucu})"
+                        
+                        yeni_yorum_metni = f"{veri['yorum']}{ipucu_metni}"
+                        
+                        # Gemini'ye gidecek listeye ekle
+                        gemini_icin_hazirlanan_veriler.append({
+                            'puan': veri['puan'], 
+                            'yorum': yeni_yorum_metni
+                        })
+                    except Exception as e:
+                        print(f"BERT analizi hatası (yorum atlandı): {e}")
+                        gemini_icin_hazirlanan_veriler.append(veri) # Hata olursa ham halini ekle
+
+                # ADIM 2.2: Gemini ile Final Analiz
+                print("Adım 2/2: Zenginleştirilmiş veriler Gemini'ye gönderiliyor...")
+                analiz_sonucu = analyze_batch_with_gemini(gemini_icin_hazirlanan_veriler)
+                
+                if not analiz_sonucu or not analiz_sonucu.get("konu_analizleri"):
+                    return ham_veriler 
+                
+                analiz_sonucu["analiz_edilen_yorum_sayisi"] = len(ham_veriler)
+                return analiz_sonucu
+
+            # 3. SADECE GEMINI MODU
+            elif motor_tipi == 'gemini':
+                print(f"N11 verileri ({len(ham_veriler)} adet) Gemini ile analiz ediliyor...")
+                analiz_sonucu = analyze_batch_with_gemini(ham_veriler)
+                if not analiz_sonucu or not analiz_sonucu.get("konu_analizleri"): return ham_veriler
+                analiz_sonucu["analiz_edilen_yorum_sayisi"] = len(ham_veriler)
+                return analiz_sonucu
+            
+            # 4. SADECE BERT MODU (Veya Ham Liste)
+            else:
+                return ham_veriler
+
     finally:
         print("Selenium WebDriver kapatılıyor."); driver.quit()
 
@@ -102,10 +177,10 @@ def analiz_sayfasi():
     </script>
     </head> <body> <div class="container"> 
         <h1>Yorum Analiz Motoru</h1> 
-        <p>Bir ürünün yüzlerce yorumunu saniyeler içinde özetleyin.</p> 
+        <p>Trendyol veya N11 ürün linklerini analiz edebilirsiniz.</p> 
         <div id="form-container">
             <form action="/analiz-et" method="post" onsubmit="showLoader()"> 
-                <input type="text" name="url" size="80" required placeholder="Trendyol veya Hepsiburada ürün linkini yapıştırın..."> 
+                <input type="text" name="url" size="80" required placeholder="Trendyol veya N11 ürün linkini yapıştırın..."> 
                 <div class="button-group"> 
                     <button type="submit" name="motor" value="gemini" class="btn-gemini">✨ Gemini ile Hızlı Özetle</button> 
                     <button type="submit" name="motor" value="bert" class="btn-bert">⚙️ Kendi Modelimizle İncele</button> 
@@ -124,7 +199,6 @@ def analiz_et():
     if isinstance(analiz_sonuclari, dict) and "hata" in analiz_sonuclari: return f"<h1>Hata</h1><p>{analiz_sonuclari['hata']}</p><a href='/analiz'>Geri Dön</a>"
     if isinstance(analiz_sonuclari, list) and analiz_sonuclari and isinstance(analiz_sonuclari[0], dict) and "hata" in analiz_sonuclari[0]: return f"<h1>Hata</h1><p>{analiz_sonuclari[0]['hata']}</p><a href='/analiz'>Geri Dön</a>"
     
-    # --- HTML ŞABLONUNUN BAŞLANGICI ---
     html_template = """
     <!DOCTYPE html> <html lang="tr"> <head> <meta charset="UTF-8"> <title>Analiz Raporu</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -138,16 +212,24 @@ def analiz_et():
     </div> {chart_script} </body> </html>
     """
 
-    # --- MOTOR TİPİNE GÖRE İÇERİK OLUŞTURMA ---
     icerik_html = ""
     chart_script_html = ""
 
-    # Gemini veya Hibrit modunda sonuç formatı aynıdır (JSON özeti)
     if motor_tipi == 'gemini' or motor_tipi == 'hibrit':
         konu_analizleri = analiz_sonuclari.get('konu_analizleri', [])
+        
+        filtrelenmis_analizler = []
+        for analiz in konu_analizleri:
+            p_sayisi = len(analiz.get('pozitif_yorumlar', []))
+            n_sayisi = len(analiz.get('negatif_yorumlar', []))
+            nt_sayisi = len(analiz.get('notr_yorumlar', []))
+            if (p_sayisi + n_sayisi + nt_sayisi) > 0:
+                filtrelenmis_analizler.append(analiz)
+        
+        konu_analizleri = filtrelenmis_analizler 
+        
         toplam_pozitif = sum(len(a.get('pozitif_yorumlar', [])) for a in konu_analizleri)
-        toplam_negatif = sum(len(a.get('negatif_yorumlar', [])) for a in konu_analizleri)
-        toplam_bahsedilme = toplam_pozitif + toplam_negatif
+        toplam_bahsedilme = toplam_pozitif + sum(len(a.get('negatif_yorumlar', [])) for a in konu_analizleri)
         genel_skor = round((toplam_pozitif / toplam_bahsedilme) * 100) if toplam_bahsedilme > 0 else 50
 
         artilar = sorted([a for a in konu_analizleri if len(a.get('pozitif_yorumlar',[])) > len(a.get('negatif_yorumlar',[]))], key=lambda x: len(x.get('pozitif_yorumlar', [])), reverse=True)
@@ -199,7 +281,7 @@ def analiz_et():
         </script>
         """
 
-    else: # BERT motoru için (Sadece ham çıktı)
+    else:
         bert_html = ""
         for veri in analiz_sonuclari:
             bert_html += f"<div class='yorum-karti'>"
@@ -264,4 +346,4 @@ def etiketle_sayfasi():
     return render_template_string(html)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, port=5001)

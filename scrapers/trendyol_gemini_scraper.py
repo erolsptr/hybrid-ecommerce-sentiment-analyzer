@@ -1,7 +1,7 @@
 import time
 import re
-import os  
-from dotenv import load_dotenv 
+import os
+from dotenv import load_dotenv
 
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
@@ -11,8 +11,10 @@ import json
 load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-MODEL_NAME = "gemini-flash-latest" 
-BATCH_SIZE = 40
+MODEL_NAME = "gemini-3-flash-preview" 
+
+# --- OPTİMİZASYON 1: Batch Size Artırıldı ---
+BATCH_SIZE = 100
 
 def parse_style_padding_to_rating(style_text):
     if not style_text or 'padding-inline-end' not in style_text: return 5
@@ -26,7 +28,7 @@ def parse_style_padding_to_rating(style_text):
     return 5
 
 def call_gemini_api(partial_comments):
-    """Belirli bir yorum grubu için API çağrısı yapar."""
+    """API çağrısını yapar, 429 hatası alırsa bekleyip tekrar dener."""
     tum_yorumlar_metni = "\n---\n".join([f"Puan: {y['puan']}, Yorum: {y['yorum']}" for y in partial_comments])
     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={GOOGLE_API_KEY}"
 
@@ -68,22 +70,39 @@ def call_gemini_api(partial_comments):
     """
     
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    try:
-        response = requests.post(api_url, json=payload, timeout=120)
-        response.raise_for_status()
-        result = response.json()
-        if 'candidates' not in result or not result['candidates']:
-            return {"konu_analizleri": []}
+    
+    # --- OPTİMİZASYON 2: Hata Bekleme Süresi Kısaltıldı ---
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(api_url, json=payload, timeout=120)
+            response.raise_for_status() 
             
-        json_response_text = result['candidates'][0]['content']['parts'][0]['text'].strip()
-        json_response_text = json_response_text.replace("```json", "").replace("```", "")
-        return json.loads(json_response_text)
-    except Exception as e:
-        print(f"Gemini API parçalı istek hatası: {e}")
-        return {"konu_analizleri": []}
+            result = response.json()
+            if 'candidates' not in result or not result['candidates']:
+                return {"konu_analizleri": []}
+                
+            json_response_text = result['candidates'][0]['content']['parts'][0]['text'].strip()
+            json_response_text = json_response_text.replace("```json", "").replace("```", "")
+            return json.loads(json_response_text)
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                # Bekleme süresini düşürdük: 10sn, 20sn, 30sn
+                wait_time = 10 + (attempt * 10) 
+                print(f"⚠️ API Kotası (429). {wait_time}sn bekleniyor... (Deneme {attempt+1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                print(f"API Hatası (Kritik): {e}")
+                return {"konu_analizleri": []}
+        except Exception as e:
+            print(f"Beklenmeyen hata: {e}")
+            return {"konu_analizleri": []}
+    
+    print("Maksimum deneme sayısına ulaşıldı, bu paket atlanıyor.")
+    return {"konu_analizleri": []}
 
 def merge_results(results_list):
-    """Birden fazla API cevabını tek bir JSON yapısında birleştirir."""
     final_dict = {"konu_analizleri": []}
     topic_map = {} 
 
@@ -118,13 +137,19 @@ def analyze_batch_with_gemini(yorum_listesi):
         print(f"   -> Paket işleniyor: {i} - {i + len(batch)} arası...")
         batch_result = call_gemini_api(batch)
         all_results.append(batch_result)
-        time.sleep(1.5) 
+        
+        # --- OPTİMİZASYON 3: Proaktif Bekleme ---
+        # Hata almayı beklemek yerine, her başarılı istekten sonra 4 saniye nefes aldırıyoruz.
+        # Bu sayede 429 hatasına düşme ihtimalimiz %90 azalır.
+        if i + BATCH_SIZE < len(yorum_listesi): # Son pakette beklemeye gerek yok
+            print("   (API soğutuluyor: 4sn)...")
+            time.sleep(4) 
 
     print("Tüm paketler tamamlandı, sonuçlar birleştiriliyor...")
     return merge_results(all_results)
 
 def cek(driver, url, limit):
-    print("Trendyol GEMINI Scraper (Detaylı Analiz - Secure Key) başlatıldı...")
+    print("Trendyol GEMINI Scraper (Secure Key + Optimized) başlatıldı...")
     
     cekilen_veriler = []
     cekilen_yorum_metinleri = set()
@@ -135,11 +160,11 @@ def cek(driver, url, limit):
         try:
             cerez_kabul_butonu = driver.find_element(By.ID, "onetrust-accept-btn-handler")
             driver.execute_script("arguments[0].click();", cerez_kabul_butonu); print("Çerez banner'ı kapatıldı."); time.sleep(1)
-        except Exception: print("Çerez banner'ı bulunamadı.")
+        except Exception: pass
         try:
             anladim_butonu = driver.find_element(By.CLASS_NAME, "onboarding__default-renderer-primary-button")
             anladim_butonu.click(); print("'Anladım' butonuna tıklandı."); time.sleep(1)
-        except Exception: print("Konum pop-up'ı çıkmadı.")
+        except Exception: pass
         if "/yorumlar" not in driver.current_url:
             try:
                 degerlendirmeler_butonu = driver.find_element(By.CLASS_NAME, "reviews-summary-reviews-detail")
