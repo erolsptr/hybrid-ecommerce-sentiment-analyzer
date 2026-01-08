@@ -24,6 +24,10 @@
         .review-text-pos { border-left: 4px solid #198754; background: #f9fdfa; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 0.95rem; }
         .review-text-neg { border-left: 4px solid #dc3545; background: #fff8f8; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 0.95rem; }
         .back-btn { position: fixed; bottom: 20px; right: 20px; z-index: 99; border-radius: 50px; padding: 10px 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+        
+        /* Yeni BERT Paneli Stilleri */
+        .bert-scroll-table { max-height: 350px; overflow-y: auto; scrollbar-width: thin; }
+        .bert-badge { font-size: 0.8rem; padding: 5px 8px; border-radius: 6px; }
     </style>
 </head>
 <body>
@@ -60,7 +64,7 @@
     <div class="container">
         
         <!-- GEMINI / HIBRIT MODU GÖRÜNÜMÜ -->
-        {% if motor == 'gemini' or motor == 'hibrit' %}
+        {% if motor == 'llama' or motor == 'hibrit' %}
             
             <!-- Hesaplama Mantığı -->
             {% set ns = namespace(pos=0, neg=0) %}
@@ -73,8 +77,9 @@
             {% set total = ns.pos + ns.neg %}
             {% set score = ((ns.pos / total) * 100)|round|int if total > 0 else 50 %}
 
-            <!-- SKOR VE ÖZET KARTLARI -->
+<!-- SKOR VE ÖZET KARTLARI -->
             <div class="row g-4 mb-5">
+                <!-- 1. SKOR KARTI -->
                 <div class="col-md-4 d-flex justify-content-center align-items-center">
                     <div class="score-circle" style="background: linear-gradient(135deg, {{ '#198754' if score >= 70 else '#ffc107' if score >= 50 else '#dc3545' }} 0%, {{ '#146c43' if score >= 70 else '#e0a800' if score >= 50 else '#b02a37' }} 100%);">
                         <span class="score-val">{{ score }}</span>
@@ -82,6 +87,7 @@
                     </div>
                 </div>
                 
+                <!-- 2. ARTILAR KARTI -->
                 <div class="col-md-4">
                     <div class="card card-custom h-100">
                         <div class="card-header bg-white fw-bold text-success border-0 pb-0">
@@ -89,19 +95,30 @@
                         </div>
                         <div class="card-body">
                             <ul class="list-group list-group-flush">
-                                <!-- Pozitif sıralama -->
+                                <!-- Sayacı sıfırla -->
+                                {% set ns_pros = namespace(count=0) %}
+                                <!-- Pozitif sayısına göre sırala -->
                                 {% for item in sonuclar.konu_analizleri|sort(attribute='pozitif_yorumlar', reverse=True) %}
-                                    {% if loop.index <= 3 and item.pozitif_yorumlar|length > item.negatif_yorumlar|length %}
-                                        <li class="list-group-item bg-transparent">
-                                            <i class="fas fa-check text-success me-2"></i>{{ item.konu }}
+                                    <!-- KURAL: Pozitif > Negatif VE Gösterilen Sayı < 3 -->
+                                    <!-- EK KURAL: Pozitif, Negatifin en az 1.2 katı olmalı (45 vs 42 durumunu engeller) -->
+                                    {% if ns_pros.count < 3 and item.pozitif_yorumlar|length > (item.negatif_yorumlar|length * 1.1) %}
+                                        <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
+                                            <span><i class="fas fa-check text-success me-2"></i>{{ item.konu }}</span>
+                                            <span class="badge bg-success rounded-pill">{{ item.pozitif_yorumlar|length }}</span>
                                         </li>
+                                        {% set ns_pros.count = ns_pros.count + 1 %}
                                     {% endif %}
                                 {% endfor %}
+                                
+                                {% if ns_pros.count == 0 %}
+                                    <li class="list-group-item bg-transparent text-muted fst-italic small">Belirgin bir artı özellik bulunamadı.</li>
+                                {% endif %}
                             </ul>
                         </div>
                     </div>
                 </div>
 
+                <!-- 3. EKSİLER KARTI -->
                 <div class="col-md-4">
                     <div class="card card-custom h-100">
                         <div class="card-header bg-white fw-bold text-danger border-0 pb-0">
@@ -109,14 +126,23 @@
                         </div>
                         <div class="card-body">
                             <ul class="list-group list-group-flush">
-                                <!-- Negatif sıralama -->
+                                <!-- Sayacı sıfırla -->
+                                {% set ns_cons = namespace(count=0) %}
+                                <!-- Negatif sayısına göre sırala -->
                                 {% for item in sonuclar.konu_analizleri|sort(attribute='negatif_yorumlar', reverse=True) %}
-                                    {% if loop.index <= 3 and item.negatif_yorumlar|length >= item.pozitif_yorumlar|length and item.negatif_yorumlar|length > 0 %}
-                                        <li class="list-group-item bg-transparent">
-                                            <i class="fas fa-times text-danger me-2"></i>{{ item.konu }}
+                                    <!-- KURAL: Negatif >= Pozitif VE Gösterilen Sayı < 3 VE En az 1 negatif yorum var -->
+                                    {% if ns_cons.count < 3 and item.negatif_yorumlar|length >= item.pozitif_yorumlar|length and item.negatif_yorumlar|length > 0 %}
+                                        <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
+                                            <span><i class="fas fa-times text-danger me-2"></i>{{ item.konu }}</span>
+                                            <span class="badge bg-danger rounded-pill">{{ item.negatif_yorumlar|length }}</span>
                                         </li>
+                                        {% set ns_cons.count = ns_cons.count + 1 %}
                                     {% endif %}
                                 {% endfor %}
+
+                                {% if ns_cons.count == 0 %}
+                                    <li class="list-group-item bg-transparent text-muted fst-italic small">Belirgin bir şikayet bulunamadı.</li>
+                                {% endif %}
                             </ul>
                         </div>
                     </div>
@@ -131,7 +157,7 @@
 
             <!-- DETAYLI ANALİZ (AKORDEON) -->
             <h3 class="mb-4"><i class="fas fa-list-ul"></i> Detaylı Konu Analizi</h3>
-            <div class="accordion" id="accordionPanelsStayOpenExample">
+            <div class="accordion mb-5" id="accordionPanelsStayOpenExample">
                 {% for item in sonuclar.konu_analizleri %}
                     {% set pos_count = item.pozitif_yorumlar|length %}
                     {% set neg_count = item.negatif_yorumlar|length %}
@@ -173,14 +199,54 @@
                 {% endfor %}
             </div>
 
-            <!-- JAVASCRIPT & CHART.JS (Düzeltilmiş ve Güvenli Versiyon) -->
+            <!-- YENİ: BERT KANIT PANELİ (Sadece Hibrit Modda ve BERT veri bulduysa görünür) -->
+            {% if motor == 'hibrit' and sonuclar.bert_istatistik %}
+            <div class="card card-custom mb-5 border-2 border-primary">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <span class="fw-bold"><i class="fas fa-robot me-2"></i> Yerel BERT Modeli Analizi (Hibrit Kanıtı)</span>
+                    <span class="badge bg-light text-primary">{{ sonuclar.bert_istatistik.toplam_tespit }} Özellik Tespit Edildi</span>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-light border-start border-4 border-primary">
+                        <i class="fas fa-info-circle text-primary me-2"></i>
+Aşağıdaki liste, yorumlar bulut <strong>(Llama 3.3)</strong> sistemine gönderilmeden <strong>önce</strong>, kendi eğittiğimiz yerel BERT modeli tarafından analiz edilmiştir.
+                        Bu tespitler, Llama modeline "ipucu" olarak sunulmuş ve sonuçların doğruluğu artırılmıştır.
+                    </div>
+                    
+                    <div class="bert-scroll-table">
+                        <table class="table table-striped table-hover align-middle">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    <th width="70%">Orijinal Yorum Metni</th>
+                                    <th width="30%">BERT Tespiti</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for veri in sonuclar.bert_istatistik.detay %}
+                                <tr>
+                                    <td class="small text-muted fst-italic">"{{ veri.yorum }}"</td>
+                                    <td>
+                                        {% for konu, duygu in veri.bert_analizi.items() %}
+                                            <span class="badge bert-badge {{ 'bg-success' if duygu == 'Pozitif' else 'bg-danger' if duygu == 'Negatif' else 'bg-secondary' }} mb-1">
+                                                {{ konu }} ({{ duygu }})
+                                            </span>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            <!-- BERT KANIT PANELİ SONU -->
+
             <script>
-                // Verileri Python'dan güvenli bir şekilde alıp JS dizilerine çeviriyoruz
                 const labels = [];
                 const dataPos = [];
                 const dataNeg = [];
 
-                // Döngüyü burada oluşturuyoruz
                 {% for item in sonuclar.konu_analizleri %}
                     {% if (item.pozitif_yorumlar|length + item.negatif_yorumlar|length) > 0 %}
                         labels.push("{{ item.konu }}");
@@ -189,36 +255,20 @@
                     {% endif %}
                 {% endfor %}
 
-                // Grafik Oluşturma
                 const ctx = document.getElementById('sentimentChart').getContext('2d');
                 new Chart(ctx, {
                     type: 'bar',
                     data: {
                         labels: labels,
                         datasets: [
-                            { 
-                                label: 'Pozitif', 
-                                data: dataPos, 
-                                backgroundColor: 'rgba(25, 135, 84, 0.7)', 
-                                borderRadius: 5,
-                                stack: 'Stack 0'
-                            },
-                            { 
-                                label: 'Negatif', 
-                                data: dataNeg, 
-                                backgroundColor: 'rgba(220, 53, 69, 0.7)', 
-                                borderRadius: 5,
-                                stack: 'Stack 0'
-                            }
+                            { label: 'Pozitif', data: dataPos, backgroundColor: 'rgba(25, 135, 84, 0.7)', borderRadius: 5 },
+                            { label: 'Negatif', data: dataNeg, backgroundColor: 'rgba(220, 53, 69, 0.7)', borderRadius: 5 }
                         ]
                     },
                     options: {
                         indexAxis: 'y',
                         responsive: true,
-                        scales: { 
-                            x: { stacked: true }, 
-                            y: { stacked: true } 
-                        },
+                        scales: { x: { stacked: true }, y: { stacked: true } },
                         plugins: { legend: { position: 'top' } }
                     }
                 });

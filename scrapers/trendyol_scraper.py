@@ -1,153 +1,147 @@
 import time
 import re
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-
-import nltk
-from nltk.corpus import stopwords
 from transformers import pipeline
 import os
 
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+print("Trendyol Scraper (BERT - Strict Mode) başlatılıyor...")
 
-print("Trendyol Scraper için eğittiğimiz model yükleniyor...")
 try:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    nltk_resources = ["punkt", "stopwords", "averaged_perceptron_tagger", "universal_tagset"]
-    for resource in nltk_resources:
-        try:
-            if resource in ["punkt", "stopwords"]: nltk.data.find(f"corpora/{resource}")
-            else: nltk.data.find(f"taggers/{resource}")
-        except LookupError: nltk.download(resource)
-
     yerel_model_yolu = "./yeni_modelim/best"
     
+    if os.path.exists(yerel_model_yolu):
+        print("✅ Eğitilmiş yerel model bulundu.")
+        model_source = yerel_model_yolu
+    else:
+        print("⚠️ Varsayılan 'savasy/bert' modeli kullanılıyor.")
+        model_source = "savasy/bert-base-turkish-sentiment-cased"
+
     sentiment_analyzer = pipeline(
         "sentiment-analysis", 
-        model=yerel_model_yolu,
-        model_kwargs={"id2label": {0: "negative", 1: "neutral", 2: "positive"}}
+        model=model_source,
+        truncation=True
     )
-    
-    print("Modelimiz başarıyla yüklendi!")
     MODELS_LOADED = True
 except Exception as e:
-    print(f"Model yüklenirken bir hata oluştu: {e}")
+    print(f"Model yüklenirken hata: {e}")
     MODELS_LOADED = False
 
-def parse_style_padding_to_rating(style_text):
-    if not style_text or 'padding-inline-end' not in style_text: return 5
-    match = re.search(r'padding-inline-end:\s*([0-9.]+)px', style_text)
-    if match:
-        padding = float(match.group(1))
-        if padding > 60: return 1
-        if padding > 45: return 2
-        if padding > 30: return 3
-        if padding > 15: return 4
-    return 5
-
 def find_true_aspects(text):
-    stop_words = set(stopwords.words('turkish'))
-    stop_words.update(["ürün", "ürünü", "şey", "fiyat", "teşekkür", "bence", "gibi", "bir", "cok", "çok", "daha", "kadar", "göre", "aldım", "gerçekten", "tek", "gece", "artık", "gün", "tam", "şekilde", "için"])
-    aspects = []
-    try:
-        tokens = nltk.word_tokenize(text.lower(), language='turkish')
-        tagged_words = nltk.pos_tag(tokens, tagset='universal')
-        for word, tag in tagged_words:
-            if tag == 'NOUN' and word.isalpha() and len(word) > 3 and word not in stop_words:
-                aspects.append(word)
-    except Exception:
-        pass
-    return list(dict.fromkeys(aspects))
+    text = text.lower()
+    
+    # E-Ticaret Whitelist
+    valid_aspects = [
+        "kargo", "paket", "paketleme", "teslimat", "satıcı", "mağaza", "hız",
+        "kalite", "malzeme", "kumaş", "dikiş", "beden", "kalıp", "renk", "boyut", "ebat",
+        "ses", "gürültü", "tiz", "mikrofon", "şarj", "pil", "batarya", "kablo", # "bas" çıkarıldı
+        "ekran", "görüntü", "kamera", "fotoğraf", "video", "hafıza", "işlemci", "donanım",
+        "kurulum", "montaj", "parça", "vida", "kutu", "ambalaj", "kapak", "kılıf",
+        "tat", "lezzet", "koku", "tazelik", "kıvam", 
+        "etki", "performans", "işlev", "çekim", "güç", "motor", "soğutma", "ısıtma",
+        "doku", "yumuşaklık", "rahatlık", "konfor", "tasarım", "görünüm", "duruş", "şık",
+        "fiyat", "değer"
+    ]
+    
+    found_aspects = []
+    
+    for aspect in valid_aspects:
+        pattern = r'\b' + aspect + r'[a-zçğıöşü]*'
+        if re.search(pattern, text):
+            found_aspects.append(aspect)
+            
+    return found_aspects
+
+def check_negation(sentence, keyword):
+    """'Sorun yok', 'Kırık değil' gibi durumları kontrol eder."""
+    negators = ["yok", "değil", "olmadı", "yaşamadım", "çıkmadı", "gelmedi", "etmedi", "yapmadı"]
+    sentence = sentence.lower()
+    if keyword in sentence:
+        parts = sentence.split(keyword)
+        if len(parts) > 1:
+            after_part = parts[1]
+            # Kelimeden sonraki kısımda olumsuzluk eki var mı?
+            for neg in negators:
+                if neg in after_part: return True
+    return False
+
+def split_into_segments(text):
+    """Metni bağlaçlara göre daha agresif böler."""
+    sentences = re.split(r'[.!?]+', text)
+    segments = []
+    # Bağlaç listesi
+    conjunctions = [" ama ", " fakat ", " lakin ", " ancak ", " rağmen ", " oysa ", " yalnız ", " ve "]
+    
+    for sent in sentences:
+        temp_segments = [sent]
+        for conj in conjunctions:
+            new_temp = []
+            for seg in temp_segments:
+                if conj in seg.lower():
+                    new_temp.extend(re.split(conj, seg, flags=re.IGNORECASE))
+                else:
+                    new_temp.append(seg)
+            temp_segments = new_temp
+        segments.extend(temp_segments)
+    
+    return [s.strip() for s in segments if s.strip()]
 
 def analyze_aspects_with_finetuned_model(text):
-    if not MODELS_LOADED: return {"hata": "Model yüklenemedi."}
+    if not MODELS_LOADED: return {}
     
     aspects = find_true_aspects(text)
-    if not aspects: return {}
+    if not aspects: return {} 
     
     analysis_results = {}
-    sentences = nltk.sent_tokenize(text, language='turkish')
+    segments = split_into_segments(text)
     
     for aspect in aspects:
-        for sentence in sentences:
-            if aspect in sentence.lower():
-                try:
-                    result = sentiment_analyzer(sentence)[0]
-                    
-                    if result['label'] == 'positive': label = "Pozitif"
-                    elif result['label'] == 'neutral': label = "Nötr"
-                    else: label = "Negatif"
-                    
-                    analysis_results[aspect] = label
-                except Exception as e:
-                    print(f"'{aspect}' analizi sırasında hata: {e}")
-                    continue
+        # İlgili segmenti bul
+        relevant_segment = next((s for s in segments if aspect in s.lower()), text)
+        
+        try:
+            # 1. BERT Analizi
+            result = sentiment_analyzer(relevant_segment[:512])[0]
+            label_raw = result['label']
+            
+            if label_raw in ['positive', 'LABEL_2', 'POS']: duygu = "Pozitif"
+            elif label_raw in ['neutral', 'LABEL_1', 'NEU']: duygu = "Nötr"
+            else: duygu = "Negatif"
+            
+            # 2. Heuristics (Kural Bazlı Düzeltmeler)
+            
+            # Negatif Kelime Listesi (Genişletilmiş)
+            # "keşke", "özensiz", "ezilmiş" gibi kelimeler eklendi.
+            neg_keywords = [
+                "kırık", "bozuk", "kötü", "berbat", "rezalet", "iade", "sorun", "yavaş", 
+                "beğenmedim", "defolu", "çizik", "leke", "ince", "naylon", "sentetik", 
+                "özensiz", "ezilmiş", "yırtık", "parçalanmış", "eksik", "fiyasko", 
+                "değiştirin", "pişman", "keşke", "eksi", "lanet", "maalesef"
+            ]
+            
+            found_neg = next((k for k in neg_keywords if k in relevant_segment.lower()), None)
+            
+            if found_neg:
+                # "Sorun yok" kontrolü
+                is_negated = check_negation(relevant_segment, found_neg)
+                if is_negated: 
+                    duygu = "Pozitif"
+                else: 
+                    # --- DÜZELTME: Negatif kelime varsa ve olumsuzlanmıyorsa, sonuç KESİN Negatiftir.
+                    # BERT pozitif dese bile (örneğin cümledeki "güzel" kelimesine kanıp) biz Negatif yaparız.
+                    duygu = "Negatif"
+            
+            # --- DÜZELTME: "Pozitif Zorlama" (Positive Override) Kaldırıldı ---
+            # Eskiden burada "Eğer harika kelimesi varsa Negatifi Pozitif yap" diyen kod vardı.
+            # Onu sildik. Çünkü "Ürün harika ama kargo kırık" cümlesinde kargo negatiftir.
+            # "Harika" kelimesi kargoyu kurtarmamalı.
+
+            clean_aspect = aspect.capitalize()
+            analysis_results[clean_aspect] = duygu
+            
+        except Exception:
+            continue
+            
     return analysis_results
 
 def cek(driver, url, limit):
-    print("Trendyol Scraper (Kendi Modelimizle) başlatıldı...")
-    cekilen_veriler = []; cekilen_yorum_metinleri = set()
-
-    try:
-        driver.get(url)
-        time.sleep(2)
-        try:
-            cerez_butonu = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler")))
-            cerez_butonu.click(); print("Çerez banner'ı kapatıldı."); time.sleep(1)
-        except (NoSuchElementException, TimeoutException): print("Çerez banner'ı bulunamadı.")
-        try:
-            anladim_butonu = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CLASS_NAME, "onboarding__default-renderer-primary-button")))
-            anladim_butonu.click(); print("'Anladım' butonuna tıklandı."); time.sleep(1)
-        except (NoSuchElementException, TimeoutException): print("Konum pop-up'ı çıkmadı.")
-
-        if "/yorumlar" not in driver.current_url:
-            try:
-                print("Değerlendirmeler butonu bekleniyor...")
-                degerlendirmeler_butonu = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "reviews-summary-reviews-detail")))
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", degerlendirmeler_butonu)
-                time.sleep(1); degerlendirmeler_butonu.click(); print("Değerlendirmeler sayfasına geçildi."); time.sleep(3)
-            except (NoSuchElementException, TimeoutException):
-                return [{"puan": 0, "yorum": "Değerlendirmeler butonu bulunamadı veya tıklanamadı."}]
-        
-        print("Akıllı kaydırma başladı...")
-        son_kart_sayisi = 0
-        while True:
-            kart_elementleri = driver.find_elements(By.CSS_SELECTOR, ".review, .review-card")
-            if len(kart_elementleri) >= limit or (len(kart_elementleri) == son_kart_sayisi and len(kart_elementleri) > 0): break
-            son_kart_sayisi = len(kart_elementleri)
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);"); time.sleep(2)
-        
-        kart_elementleri = driver.find_elements(By.CSS_SELECTOR, ".review, .review-card")
-        
-        for kart in kart_elementleri:
-            try:
-                yorum_metni_elementi = kart.find_elements(By.CLASS_NAME, "review-comment")
-                if not yorum_metni_elementi: continue
-                yorum_metni = yorum_metni_elementi[0].text
-                if not yorum_metni or yorum_metni in cekilen_yorum_metinleri: continue
-
-                devamini_oku_buton = kart.find_elements(By.CLASS_NAME, "read-more")
-                if devamini_oku_buton:
-                    driver.execute_script("arguments[0].click();", devamini_oku_buton[0]); time.sleep(0.5)
-                    yorum_metni = kart.find_element(By.CLASS_NAME, "review-comment").text
-                
-                star_div = kart.find_element(By.CLASS_NAME, "star-rating-full-star")
-                style_attributu = star_div.get_attribute('style')
-                puan = parse_style_padding_to_rating(style_attributu)
-                
-                ozellikler = analyze_aspects_with_finetuned_model(yorum_metni)
-                
-                if yorum_metni:
-                    cekilen_veriler.append({ 'puan': puan, 'yorum': yorum_metni, 'ozellikler': ozellikler })
-                    cekilen_yorum_metinleri.add(yorum_metni)
-            except Exception as e:
-                print(f"Bir kart işlenirken hata: {e}")
-                continue
-        
-        print(f"Trendyol'dan toplam {len(cekilen_veriler)} adet veri çekildi ve kendi modelimizle analiz edildi.")
-        return cekilen_veriler[:limit]
-
-    except Exception as e:
-        print(f"Trendyol scraper'da bir hata oluştu: {e}")
-        return [{"puan": 0, "yorum": f"Hata: {e}"}]
+    return []

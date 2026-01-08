@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fikir Madencisi - Yorum Analiz AI</title>
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- FontAwesome İkonları -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: 'Segoe UI', sans-serif; }
@@ -17,24 +15,17 @@
         .form-control-lg:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
         .btn-custom { padding: 12px 20px; border-radius: 12px; font-weight: 600; transition: transform 0.2s; border: none; flex: 1; }
         .btn-custom:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .btn-gemini { background: linear-gradient(90deg, #38b2ac 0%, #319795 100%); color: white; }
+        
+        /* RENKLER GÜNCELLENDİ: LLAMA TURUNCUSU */
+        .btn-llama { background: linear-gradient(90deg, #f35626 0%, #feab3a 100%); color: white; }
         .btn-bert { background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%); color: white; }
         .btn-hybrid { background: linear-gradient(90deg, #9f7aea 0%, #805ad5 100%); color: white; }
+        
         .history-link { position: absolute; top: 20px; right: 20px; text-decoration: none; color: #4a5568; font-weight: 600; padding: 8px 15px; background: #edf2f7; border-radius: 20px; transition: 0.2s; }
         .history-link:hover { background: #e2e8f0; }
-        
-        /* LOGO STİLLERİ GÜNCELLENDİ */
         .platform-logos { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 2rem; }
-        .platform-logos img { 
-            height: 40px; /* Yükseklik sabitledik */
-            width: auto; 
-            object-fit: contain;
-            opacity: 0.7; 
-            filter: grayscale(100%); 
-            transition: 0.3s; 
-        }
+        .platform-logos img { height: 40px; width: auto; object-fit: contain; opacity: 0.7; filter: grayscale(100%); transition: 0.3s; }
         .platform-logos img:hover { opacity: 1; filter: grayscale(0%); transform: scale(1.1); }
-        
         #loader { display: none; text-align: center; margin-top: 2rem; }
         .loading-text { margin-top: 1rem; color: #4a5568; font-weight: 500; }
     </style>
@@ -42,7 +33,7 @@
         function showLoader() {
             document.getElementById('input-area').style.display = 'none';
             document.getElementById('loader').style.display = 'block';
-            const texts = ["Ürün sayfasına bağlanılıyor...", "Yorumlar toplanıyor...", "Yapay zeka (BERT/Gemini) devrede...", "Analiz sonuçları hazırlanıyor..."];
+            const texts = ["Ürün sayfasına bağlanılıyor...", "Yorumlar toplanıyor...", "Llama 3.3 (Groq) ile analiz ediliyor...", "Sonuçlar hazırlanıyor..."];
             let i = 0;
             const textEl = document.getElementById('loading-text');
             setInterval(() => { i = (i + 1) % texts.length; textEl.innerText = texts[i]; }, 3500);
@@ -66,21 +57,22 @@
                 </div>
                 
                 <div class="d-flex gap-3 flex-wrap">
-                    <button type="submit" name="motor" value="gemini" class="btn btn-custom btn-gemini">
-                        <i class="fas fa-bolt"></i> Hızlı Analiz (Gemini)
+                    <!-- GEMINI BUTONU YERİNE ARTIK LLAMA VAR -->
+                    <button type="submit" name="motor" value="llama" class="btn btn-custom btn-llama">
+                        <i class="fas fa-bolt"></i> Llama 3.3 Hızlı Analiz
                     </button>
+                    
                     <button type="submit" name="motor" value="bert" class="btn btn-custom btn-bert">
                         <i class="fas fa-microchip"></i> Yerel Model (BERT)
                     </button>
+                    
                     <button type="submit" name="motor" value="hibrit" class="btn btn-custom btn-hybrid">
-                        <i class="fas fa-rocket"></i> Hibrit Motor (Önerilen)
+                        <i class="fas fa-rocket"></i> Hibrit (BERT + Llama)
                     </button>
                 </div>
             </form>
 
             <div class="platform-logos">
-                <!-- Logolar artık 'static/images' klasöründen çekiliyor -->
-                <!-- Eğer dosyaları indirmediysen geçici olarak boş kutu görünür -->
                 <img src="{{ url_for('static', filename='images/trendyol.png') }}" alt="Trendyol" title="Trendyol Uyumlu">
                 <img src="{{ url_for('static', filename='images/n11.png') }}" alt="N11" title="N11 Uyumlu">
             </div>

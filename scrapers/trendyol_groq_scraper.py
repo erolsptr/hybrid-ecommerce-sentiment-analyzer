@@ -1,23 +1,29 @@
 import time
 import re
 import os
+import json
 from dotenv import load_dotenv
-import concurrent.futures 
-
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
-import requests
-import json
+import concurrent.futures
+
+# Groq Kütüphanesi
+from groq import Groq
 
 load_dotenv()
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-MODEL_NAME = "gemini-2.5-flash" 
+# API Key'i al
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+client = Groq(api_key=GROQ_API_KEY)
 
-BATCH_SIZE = 100
+# --- GÜNCELLEME: Model İsmi Değiştirildi ---
+# Eski (Kapanan): llama3-70b-8192
+# Yeni (Aktif): llama-3.3-70b-versatile
+MODEL_NAME = "llama-3.3-70b-versatile" 
+BATCH_SIZE = 75
 
 def parse_style_padding_to_rating(style_text):
-    if not style_text or 'padding-inline-end' not in style_text: return 5
+    if not style_text: return 5
     match = re.search(r'padding-inline-end:\s*([0-9.]+)px', style_text)
     if match:
         padding = float(match.group(1))
@@ -27,15 +33,15 @@ def parse_style_padding_to_rating(style_text):
         if padding > 15: return 4
     return 5
 
-def call_gemini_api(partial_comments):
+def call_groq_api(partial_comments):
+    """Groq API çağrısı yapar."""
     tum_yorumlar_metni = "\n---\n".join([f"Puan: {y['puan']}, Yorum: {y['yorum']}" for y in partial_comments])
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={GOOGLE_API_KEY}"
-
+    
     prompt = f"""
-    Sen bir e-ticaret yorum analistisin. Aşağıdaki yorumları analiz et.
+    Sen bir e-ticaret yorum analistisin. Aşağıdaki Türkçe yorumları analiz et.
     
     KURALLAR:
-    1. Analizlerini KESİNLİKLE sadece şu ana kategoriler altında topla:
+    1. Analizlerini SADECE şu ana kategoriler altında topla:
        - "Kargo ve Teslimat"
        - "Paketleme"
        - "Ürün Kalitesi ve Malzeme"
@@ -49,7 +55,7 @@ def call_gemini_api(partial_comments):
        - "Performans ve İşlevsellik"
     
     2. Eğer bir yorum bu kategorilerden hiçbirine girmiyorsa "Diğer" altına al.
-    3. Cevabı SADECE aşağıdaki JSON formatında ver.
+    3. Cevabı SADECE ve SADECE aşağıdaki JSON formatında ver. Başka hiçbir açıklama yazma.
 
     YORUMLAR:
     {tum_yorumlar_metni}
@@ -59,41 +65,37 @@ def call_gemini_api(partial_comments):
       "konu_analizleri": [
         {{
           "konu": "Kategori Adı",
-          "pozitif_yorumlar": ["Yorum metni..."],
-          "negatif_yorumlar": ["Yorum metni..."],
+          "pozitif_yorumlar": ["Yorum..."],
+          "negatif_yorumlar": ["Yorum..."],
           "notr_yorumlar": []
         }}
       ]
     }}
     """
     
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(api_url, json=payload, timeout=120)
-            response.raise_for_status() 
-            
-            result = response.json()
-            if 'candidates' not in result or not result['candidates']:
-                return {"konu_analizleri": []}
-                
-            json_response_text = result['candidates'][0]['content']['parts'][0]['text'].strip()
-            json_response_text = json_response_text.replace("```json", "").replace("```", "")
-            return json.loads(json_response_text)
+    try:
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Sen sadece JSON döndüren bir asistansın. JSON dışında tek kelime bile etme."
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            model=MODEL_NAME,
+            temperature=0, 
+            response_format={"type": "json_object"} 
+        )
+        
+        json_response_text = chat_completion.choices[0].message.content
+        return json.loads(json_response_text)
 
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                wait_time = 15 + (attempt * 15) 
-                print(f"⚠️ API Kotası (429). {wait_time}sn bekleniyor... (Deneme {attempt+1}/{max_retries})")
-                time.sleep(wait_time)
-            else:
-                return {"konu_analizleri": []}
-        except Exception as e:
-            return {"konu_analizleri": []}
-    
-    return {"konu_analizleri": []}
+    except Exception as e:
+        print(f"Groq API Hatası: {e}")
+        return {"konu_analizleri": []}
 
 def merge_results(results_list):
     final_dict = {"konu_analizleri": []}
@@ -116,34 +118,38 @@ def merge_results(results_list):
                 topic_map[konu_adi] = len(final_dict["konu_analizleri"]) - 1
     return final_dict
 
-def analyze_batch_with_gemini(yorum_listesi):
-    if not GOOGLE_API_KEY: return {"hata": "API Anahtarı eksik."}
+def analyze_batch_with_groq(yorum_listesi):
+    if not GROQ_API_KEY: return {"hata": "Groq API Anahtarı eksik."}
 
     batches = []
     for i in range(0, len(yorum_listesi), BATCH_SIZE):
         batches.append(yorum_listesi[i:i + BATCH_SIZE])
 
-    print(f"Toplam {len(yorum_listesi)} yorum, {len(batches)} paralel paket halinde işlenecek...")
+    print(f"Toplam {len(yorum_listesi)} yorum, {len(batches)} paralel paket halinde GROQ ile işlenecek...")
+    
     all_results = []
     
+    # GROQ ÇOK HIZLI OLDUĞU İÇİN PARALEL GÖNDEREBİLİRİZ
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        future_to_batch = {executor.submit(call_gemini_api, batch): i for i, batch in enumerate(batches)}
+        future_to_batch = {executor.submit(call_groq_api, batch): i for i, batch in enumerate(batches)}
         
         for future in concurrent.futures.as_completed(future_to_batch):
             batch_index = future_to_batch[future]
             try:
                 data = future.result()
-                if data:
+                if data and "konu_analizleri" in data and data["konu_analizleri"]:
                     all_results.append(data)
-                    print(f"   -> Paket {batch_index + 1} tamamlandı ✅")
+                    print(f"   -> Groq Paketi {batch_index + 1} Tamamlandı ✅")
+                else:
+                    print(f"   -> Groq Paketi {batch_index + 1} Boş Döndü ⚠️")
             except Exception as e:
-                print(f"   -> Paket {batch_index + 1} HATA ALDI ❌: {e}")
+                print(f"   -> Groq Paketi {batch_index + 1} Hata ❌: {e}")
 
-    print("Tüm paralel işlemler tamamlandı, sonuçlar birleştiriliyor...")
     return merge_results(all_results)
 
+# --- SCRAPER KISMI ---
 def cek(driver, url, limit):
-    print("Trendyol Scraper (Başlık + Yorum v2) başlatıldı...")
+    print("Trendyol GROQ Scraper (Llama 3.3) başlatıldı...")
     cekilen_veriler = []
     cekilen_yorum_metinleri = set()
     urun_basligi = "Bilinmeyen Trendyol Ürünü"
@@ -156,34 +162,26 @@ def cek(driver, url, limit):
         try: driver.find_element(By.CLASS_NAME, "onboarding__default-renderer-primary-button").click(); time.sleep(1)
         except: pass
 
-        # --- GÜNCELLENEN BAŞLIK ÇEKME ALANI ---
         baslik_bulundu = False
-        # 1. Deneme: Ürün Sayfası Başlığı
         try:
             baslik_elementi = driver.find_element(By.CLASS_NAME, "product-title")
             urun_basligi = baslik_elementi.text.strip()
-            print(f"Ürün Başlığı (Ana Sayfa): {urun_basligi}")
             baslik_bulundu = True
         except: pass
         
-        # 2. Deneme: Yorumlar Sayfası Başlığı (Senin verdiğin selector)
         if not baslik_bulundu:
             try:
                 baslik_elementi = driver.find_element(By.CLASS_NAME, "info-title-text")
                 urun_basligi = baslik_elementi.text.strip()
-                print(f"Ürün Başlığı (Yorum Sayfası): {urun_basligi}")
                 baslik_bulundu = True
             except: pass
             
-        # 3. Deneme: Eski Yöntemler (Fallback)
         if not baslik_bulundu:
             try:
                 marka = driver.find_element(By.CLASS_NAME, "pr-new-br").text
                 ad = driver.find_element(By.CLASS_NAME, "pr-nm").text
                 urun_basligi = f"{marka} {ad}"
-            except:
-                print("Başlık çekilemedi.")
-        # --------------------------------------
+            except: print("Başlık çekilemedi.")
 
         if "/yorumlar" not in driver.current_url:
             try:
