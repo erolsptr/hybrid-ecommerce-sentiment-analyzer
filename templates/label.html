@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veri Etiketleme - Fikir Madencisi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; padding: 2rem 0; }
+        .label-container { max-width: 800px; margin: auto; }
+        .review-card { background: white; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); padding: 2rem; position: relative; border-left: 5px solid #0d6efd; }
+        .review-text { font-size: 1.2rem; font-style: italic; color: #495057; margin: 1.5rem 0; line-height: 1.6; }
+        .star-rating { color: #ffc107; font-size: 1.2rem; }
+        .tag-row { background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #eee; display: flex; gap: 10px; align-items: center; }
+        .btn-add { background-color: #e9ecef; color: #495057; border: none; font-weight: 600; }
+        .btn-add:hover { background-color: #dee2e6; }
+        .btn-save { background-color: #0d6efd; color: white; padding: 12px; font-weight: 600; width: 100%; border-radius: 10px; margin-top: 1rem; }
+        .btn-save:hover { background-color: #0b5ed7; }
+        .stats-badge { position: absolute; top: 20px; right: 20px; background: #e7f1ff; color: #0d6efd; padding: 5px 12px; border-radius: 20px; font-weight: 600; font-size: 0.85rem; }
+        .empty-state { text-align: center; padding: 5rem 0; }
+    </style>
+</head>
+<body>
+
+    <div class="container label-container">
+        <div class="mb-4 d-flex justify-content-between align-items-center">
+            <a href="/" class="text-decoration-none text-muted fw-bold"><i class="fas fa-arrow-left"></i> Ana Sayfa</a>
+            <h4 class="m-0 fw-bold">Eğitim Verisi Etiketleme</h4>
+            <div style="width: 100px;"></div> <!-- Spacer -->
+        </div>
+
+        {% if hata %}
+            <div class="alert alert-warning text-center">{{ hata }} <br> <a href="/topla" class="alert-link">Veri Topla</a></div>
+        {% elif bitti %}
+            <div class="review-card empty-state">
+                <i class="fas fa-check-circle text-success fa-4x mb-3"></i>
+                <h2>Tebrikler!</h2>
+                <p class="lead text-muted">Tüm yorumlar etiketlendi. Toplam {{ sayi }} adet etiketli veriniz var.</p>
+                <a href="/" class="btn btn-primary mt-3">Ana Sayfaya Dön</a>
+            </div>
+        {% else %}
+            <div class="review-card">
+                <div class="stats-badge"><i class="fas fa-database"></i> {{ istatistik }}</div>
+                
+                <div class="mb-2">
+                    <span class="star-rating">
+                        {% for i in range(yorum.puan|int) %}<i class="fas fa-star"></i>{% endfor %}
+                        <span class="text-muted ms-2 small">({{ yorum.puan }} Yıldız)</span>
+                    </span>
+                </div>
+
+                <div class="review-text">
+                    <i class="fas fa-quote-left text-primary opacity-25 me-2"></i>
+                    {{ yorum.yorum }}
+                    <i class="fas fa-quote-right text-primary opacity-25 ms-2"></i>
+                </div>
+
+                <hr class="my-4">
+
+                <form method="post">
+                    <input type="hidden" name="yorum_metni" value="{{ yorum.yorum }}">
+                    
+                    <h6 class="fw-bold mb-3 text-secondary">Tespit Edilen Konular ve Duygular:</h6>
+                    
+                    <div id="etiket-alani">
+                        <!-- İlk Satır (Otomatik gelir) -->
+                        <div class="tag-row">
+                            <input type="text" name="konu" class="form-control" placeholder="Konu (örn: kamera, kargo)" required>
+                            <select name="duygu" class="form-select" style="max-width: 150px;">
+                                <option value="Pozitif">Pozitif</option>
+                                <option value="Negatif">Negatif</option>
+                                <option value="Nötr">Nötr</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mb-3">
+                        <button type="button" class="btn btn-add btn-sm" onclick="yeniSatirEkle()">
+                            <i class="fas fa-plus"></i> Başka Konu Ekle
+                        </button>
+                    </div>
+
+                    <button type="submit" class="btn btn-save shadow-sm">
+                        <i class="fas fa-save me-2"></i> Kaydet ve Sonrakine Geç
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function yeniSatirEkle() {
+            const alan = document.getElementById('etiket-alani');
+            const yeniDiv = document.createElement('div');
+            yeniDiv.className = 'tag-row';
+            yeniDiv.innerHTML = `
+                <input type="text" name="konu" class="form-control" placeholder="Konu">
+                <select name="duygu" class="form-select" style="max-width: 150px;">
+                    <option value="Pozitif">Pozitif</option>
+                    <option value="Negatif">Negatif</option>
+                    <option value="Nötr">Nötr</option>
+                </select>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
+            `;
+            alan.appendChild(yeniDiv);
+        }
+    </script>
+</body>
+</html>

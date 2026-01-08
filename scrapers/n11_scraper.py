@@ -6,13 +6,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 def parse_rating_from_style(style_text):
-    """
-    Örn: style="--rating: 80;" stringinden 80'i alıp 5 üzerinden puana çevirir.
-    """
     if not style_text: return 5
     match = re.search(r'--rating:\s*([0-9]+)', style_text)
     if match:
-        return int(int(match.group(1)) / 20) 
+        rating_value = int(match.group(1))
+        return int(rating_value / 20) 
     return 5
 
 def cek(driver, url, limit):
@@ -24,16 +22,28 @@ def cek(driver, url, limit):
         driver.get(url)
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-        # --- Başlık Çekme ---
+        # --- GÜNCELLENEN BAŞLIK ÇEKME ALANI ---
+        baslik_bulundu = False
+        # 1. Deneme: Ürün Sayfası (h1.title)
         try:
-            # Senin gönderdiğin: <h1 class="title max-three-lines"...>
             baslik_elementi = WebDriverWait(driver, 5).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "h1.title"))
             )
             urun_basligi = baslik_elementi.text.strip()
-            print(f"Ürün Başlığı: {urun_basligi}")
-        except:
-            print("Ürün başlığı çekilemedi.")
+            print(f"Ürün Başlığı (Ana Sayfa): {urun_basligi}")
+            baslik_bulundu = True
+        except: pass
+
+        # 2. Deneme: Yorum Sayfası (product-card-details-title)
+        if not baslik_bulundu:
+            try:
+                baslik_elementi = driver.find_element(By.CLASS_NAME, "product-card-details-title")
+                urun_basligi = baslik_elementi.text.strip()
+                print(f"Ürün Başlığı (Yorum Sayfası): {urun_basligi}")
+                baslik_bulundu = True
+            except: 
+                print("Ürün başlığı çekilemedi.")
+        # -------------------------------------
 
         # Çerez / Popup Kapatma
         try:
@@ -106,7 +116,6 @@ def cek(driver, url, limit):
 
         print(f"N11'den toplam {len(cekilen_veriler)} yorum çekildi.")
         
-        # --- RETURN DEĞİŞİKLİĞİ ---
         return {
             "baslik": urun_basligi,
             "yorumlar": cekilen_veriler

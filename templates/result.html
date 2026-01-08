@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analiz Sonucu - Fikir Madencisi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; padding-bottom: 3rem; }
+        .header-section { background: white; padding: 2rem 0; border-bottom: 1px solid #eee; margin-bottom: 2rem; }
+        .score-circle { width: 150px; height: 150px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto; color: white; font-weight: bold; box-shadow: 0 10px 20px rgba(0,0,0,0.15); transition: transform 0.3s; }
+        .score-circle:hover { transform: scale(1.05); }
+        .score-val { font-size: 3.5rem; line-height: 1; }
+        .score-label { font-size: 0.9rem; opacity: 0.9; }
+        .card-custom { border: none; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); height: 100%; transition: 0.3s; }
+        .card-custom:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+        .list-group-item { border: none; padding: 0.8rem 1rem; }
+        .badge-pos { background-color: #d1e7dd; color: #0f5132; }
+        .badge-neg { background-color: #f8d7da; color: #842029; }
+        .accordion-button:not(.collapsed) { background-color: #e7f1ff; color: #0c63e4; }
+        .source-badge { position: absolute; top: 20px; right: 20px; background: #fff3cd; color: #856404; padding: 5px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 1px solid #ffeeba; }
+        .review-text-pos { border-left: 4px solid #198754; background: #f9fdfa; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 0.95rem; }
+        .review-text-neg { border-left: 4px solid #dc3545; background: #fff8f8; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 0.95rem; }
+        .back-btn { position: fixed; bottom: 20px; right: 20px; z-index: 99; border-radius: 50px; padding: 10px 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+
+    <!-- HATA YÖNETİMİ -->
+    {% if hata %}
+    <div class="container mt-5 text-center">
+        <div class="alert alert-danger shadow-sm">
+            <h4 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Bir Sorun Oluştu</h4>
+            <p>{{ hata }}</p>
+            <hr>
+            <a href="/" class="btn btn-outline-danger">Ana Sayfaya Dön</a>
+        </div>
+    </div>
+    {% else %}
+
+    <!-- ÜST BİLGİ ALANI -->
+    <div class="header-section text-center position-relative">
+        <div class="container">
+            {% if sonuclar.kaynaktan_geldi %}
+                <div class="source-badge"><i class="fas fa-database"></i> Veritabanından Yüklendi</div>
+            {% endif %}
+            
+            <h5 class="text-muted text-uppercase letter-spacing-2 mb-2">
+                {{ motor|upper }} Analiz Raporu
+            </h5>
+            <h1 class="display-6 fw-bold mb-3">{{ sonuclar.baslik }}</h1>
+            <span class="badge bg-secondary rounded-pill px-3 py-2">
+                <i class="fas fa-comments"></i> {{ sonuclar.analiz_edilen_yorum_sayisi }} Yorum İncelendi
+            </span>
+        </div>
+    </div>
+
+    <div class="container">
+        
+        <!-- GEMINI / HIBRIT MODU GÖRÜNÜMÜ -->
+        {% if motor == 'gemini' or motor == 'hibrit' %}
+            
+            <!-- Hesaplama Mantığı -->
+            {% set ns = namespace(pos=0, neg=0) %}
+            {% for item in sonuclar.konu_analizleri %}
+                {% if (item.pozitif_yorumlar|length + item.negatif_yorumlar|length) > 0 %}
+                    {% set ns.pos = ns.pos + item.pozitif_yorumlar|length %}
+                    {% set ns.neg = ns.neg + item.negatif_yorumlar|length %}
+                {% endif %}
+            {% endfor %}
+            {% set total = ns.pos + ns.neg %}
+            {% set score = ((ns.pos / total) * 100)|round|int if total > 0 else 50 %}
+
+            <!-- SKOR VE ÖZET KARTLARI -->
+            <div class="row g-4 mb-5">
+                <div class="col-md-4 d-flex justify-content-center align-items-center">
+                    <div class="score-circle" style="background: linear-gradient(135deg, {{ '#198754' if score >= 70 else '#ffc107' if score >= 50 else '#dc3545' }} 0%, {{ '#146c43' if score >= 70 else '#e0a800' if score >= 50 else '#b02a37' }} 100%);">
+                        <span class="score-val">{{ score }}</span>
+                        <span class="score-label">Memnuniyet</span>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card card-custom h-100">
+                        <div class="card-header bg-white fw-bold text-success border-0 pb-0">
+                            <i class="fas fa-thumbs-up"></i> Öne Çıkan Artılar
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">
+                                <!-- Pozitif sıralama -->
+                                {% for item in sonuclar.konu_analizleri|sort(attribute='pozitif_yorumlar', reverse=True) %}
+                                    {% if loop.index <= 3 and item.pozitif_yorumlar|length > item.negatif_yorumlar|length %}
+                                        <li class="list-group-item bg-transparent">
+                                            <i class="fas fa-check text-success me-2"></i>{{ item.konu }}
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="card card-custom h-100">
+                        <div class="card-header bg-white fw-bold text-danger border-0 pb-0">
+                            <i class="fas fa-thumbs-down"></i> Dikkat Çeken Eksiler
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">
+                                <!-- Negatif sıralama -->
+                                {% for item in sonuclar.konu_analizleri|sort(attribute='negatif_yorumlar', reverse=True) %}
+                                    {% if loop.index <= 3 and item.negatif_yorumlar|length >= item.pozitif_yorumlar|length and item.negatif_yorumlar|length > 0 %}
+                                        <li class="list-group-item bg-transparent">
+                                            <i class="fas fa-times text-danger me-2"></i>{{ item.konu }}
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GRAFİK BÖLÜMÜ -->
+            <div class="card card-custom mb-5 p-3">
+                <h5 class="card-title text-center mb-4">Konu Bazlı Duygu Dağılımı</h5>
+                <canvas id="sentimentChart" style="max-height: 400px;"></canvas>
+            </div>
+
+            <!-- DETAYLI ANALİZ (AKORDEON) -->
+            <h3 class="mb-4"><i class="fas fa-list-ul"></i> Detaylı Konu Analizi</h3>
+            <div class="accordion" id="accordionPanelsStayOpenExample">
+                {% for item in sonuclar.konu_analizleri %}
+                    {% set pos_count = item.pozitif_yorumlar|length %}
+                    {% set neg_count = item.negatif_yorumlar|length %}
+                    {% if pos_count + neg_count > 0 %}
+                    <div class="accordion-item shadow-sm mb-3 border-0 rounded overflow-hidden">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}">
+                                <div class="d-flex w-100 justify-content-between align-items-center me-3">
+                                    <span class="fw-bold">{{ item.konu }}</span>
+                                    <div>
+                                        {% if pos_count > 0 %}<span class="badge bg-success me-1">{{ pos_count }} Pozitif</span>{% endif %}
+                                        {% if neg_count > 0 %}<span class="badge bg-danger">{{ neg_count }} Negatif</span>{% endif %}
+                                    </div>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#accordionPanelsStayOpenExample">
+                            <div class="accordion-body bg-light">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 class="text-success fw-bold">Olumlu Görüşler</h6>
+                                        {% if pos_count == 0 %}<small class="text-muted">Bu konuda olumlu yorum yok.</small>{% endif %}
+                                        {% for yorum in item.pozitif_yorumlar %}
+                                            <div class="review-text-pos"><i class="fas fa-quote-left text-success opacity-25 me-2"></i>{{ yorum }}</div>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="col-md-6 mt-3 mt-md-0">
+                                        <h6 class="text-danger fw-bold">Olumsuz Görüşler</h6>
+                                        {% if neg_count == 0 %}<small class="text-muted">Bu konuda şikayet yok.</small>{% endif %}
+                                        {% for yorum in item.negatif_yorumlar %}
+                                            <div class="review-text-neg"><i class="fas fa-quote-left text-danger opacity-25 me-2"></i>{{ yorum }}</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- JAVASCRIPT & CHART.JS (Düzeltilmiş ve Güvenli Versiyon) -->
+            <script>
+                // Verileri Python'dan güvenli bir şekilde alıp JS dizilerine çeviriyoruz
+                const labels = [];
+                const dataPos = [];
+                const dataNeg = [];
+
+                // Döngüyü burada oluşturuyoruz
+                {% for item in sonuclar.konu_analizleri %}
+                    {% if (item.pozitif_yorumlar|length + item.negatif_yorumlar|length) > 0 %}
+                        labels.push("{{ item.konu }}");
+                        dataPos.push({{ item.pozitif_yorumlar|length }});
+                        dataNeg.push({{ item.negatif_yorumlar|length }});
+                    {% endif %}
+                {% endfor %}
+
+                // Grafik Oluşturma
+                const ctx = document.getElementById('sentimentChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            { 
+                                label: 'Pozitif', 
+                                data: dataPos, 
+                                backgroundColor: 'rgba(25, 135, 84, 0.7)', 
+                                borderRadius: 5,
+                                stack: 'Stack 0'
+                            },
+                            { 
+                                label: 'Negatif', 
+                                data: dataNeg, 
+                                backgroundColor: 'rgba(220, 53, 69, 0.7)', 
+                                borderRadius: 5,
+                                stack: 'Stack 0'
+                            }
+                        ]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        scales: { 
+                            x: { stacked: true }, 
+                            y: { stacked: true } 
+                        },
+                        plugins: { legend: { position: 'top' } }
+                    }
+                });
+            </script>
+
+        <!-- BERT / HAM VERİ MODU GÖRÜNÜMÜ -->
+        {% else %}
+            <div class="alert alert-info shadow-sm">
+                <i class="fas fa-info-circle"></i> Bu modda (BERT/Ham) yapay zeka özeti yerine, tek tek yorum analizi gösterilmektedir.
+            </div>
+            
+            <div class="row">
+                {% set ham_liste = sonuclar.ham_yorumlar if sonuclar.ham_yorumlar is defined else (sonuclar.yorumlar if sonuclar.yorumlar is defined else sonuclar) %}
+                
+                {% for veri in ham_liste %}
+                <div class="col-md-6 mb-3">
+                    <div class="card card-custom h-100 p-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="badge bg-primary">
+                                {% for i in range(veri.puan|int) %}★{% endfor %}
+                            </span>
+                        </div>
+                        <p class="mb-2 text-muted fst-italic">"{{ veri.yorum }}"</p>
+                        
+                        {% if veri.ozellikler %}
+                            <div class="mt-2 pt-2 border-top">
+                                <small class="fw-bold text-secondary">BERT Tespiti:</small>
+                                <div class="mt-1">
+                                    {% for ozellik, duygu in veri.ozellikler.items() %}
+                                        <span class="badge {{ 'bg-success' if duygu == 'Pozitif' else 'bg-danger' if duygu == 'Negatif' else 'bg-secondary' }} me-1">
+                                            {{ ozellik }}: {{ duygu }}
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <a href="/" class="btn btn-primary btn-lg back-btn">
+            <i class="fas fa-search"></i> Yeni Analiz
+        </a>
+
+    </div>
+    {% endif %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

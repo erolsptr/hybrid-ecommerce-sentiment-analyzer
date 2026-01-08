@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analiz Geçmişi - Fikir Madencisi</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome İkonları -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; padding: 2rem 0; }
+        .container { max-width: 1000px; }
+        .card-history { border: none; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); overflow: hidden; }
+        .card-header { background: white; padding: 1.5rem; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+        .table-custom th { background-color: #f8f9fa; color: #6c757d; font-weight: 600; text-transform: uppercase; font-size: 0.85rem; border-bottom: 2px solid #eee; padding: 1rem; }
+        .table-custom td { padding: 1rem; vertical-align: middle; color: #495057; border-bottom: 1px solid #f0f0f0; }
+        .table-hover tbody tr:hover { background-color: #fcfcfc; }
+        .btn-view { background-color: #e7f1ff; color: #0d6efd; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; transition: 0.2s; }
+        .btn-view:hover { background-color: #0d6efd; color: white; transform: translateY(-2px); }
+        .badge-engine { font-size: 0.75rem; padding: 5px 10px; border-radius: 6px; }
+        .empty-state { padding: 4rem 2rem; text-align: center; color: #adb5bd; }
+        .back-link { text-decoration: none; color: #6c757d; font-weight: 500; display: inline-flex; align-items: center; transition: 0.2s; }
+        .back-link:hover { color: #0d6efd; transform: translateX(-5px); }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="mb-4">
+            <a href="/" class="back-link"><i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön</a>
+        </div>
+
+        <div class="card card-history">
+            <div class="card-header">
+                <h3 class="m-0 fw-bold text-dark"><i class="fas fa-history text-primary me-2"></i> Geçmiş Analizler</h3>
+                <span class="badge bg-light text-dark border">{{ gecmis|length }} Kayıt</span>
+            </div>
+            
+            <div class="card-body p-0">
+                {% if gecmis %}
+                <div class="table-responsive">
+                    <table class="table table-custom table-hover m-0">
+                        <thead>
+                            <tr>
+                                <th width="20%">Tarih</th>
+                                <th width="50%">Ürün Başlığı</th>
+                                <th width="15%">Motor</th>
+                                <th width="15%" class="text-end">İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in gecmis %}
+                            <tr>
+                                <td>
+                                    <i class="far fa-clock text-muted me-1"></i> {{ item.tarih }}
+                                </td>
+                                <td class="fw-bold">
+                                    {% if item.baslik %}
+                                        {{ item.baslik }}
+                                    {% else %}
+                                        <span class="text-muted fst-italic">Bilinmeyen Ürün</span>
+                                    {% endif %}
+                                    
+                                    <!-- URL Linki (Opsiyonel küçük link) -->
+                                    <div class="small mt-1">
+                                        <a href="{{ item.url }}" target="_blank" class="text-decoration-none text-muted" style="font-size: 0.75rem;">
+                                            <i class="fas fa-external-link-alt"></i> Ürüne Git
+                                        </a>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if item.motor == 'gemini' %}
+                                        <span class="badge bg-success bg-opacity-10 text-success badge-engine">GEMINI</span>
+                                    {% elif item.motor == 'hibrit' %}
+                                        <span class="badge bg-purple bg-opacity-10 text-primary badge-engine" style="background-color: #f3e8ff; color: #7e22ce;">HIBRIT</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary badge-engine">BERT</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <!-- Form ile tekrar POST atıyoruz (Cache'den getirmesi için) -->
+                                    <form action="/analiz-et" method="post">
+                                        <input type="hidden" name="url" value="{{ item.url }}">
+                                        <input type="hidden" name="motor" value="{{ item.motor }}">
+                                        <button type="submit" class="btn btn-view">
+                                            Raporu Aç <i class="fas fa-chevron-right ms-1"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-search fa-3x mb-3"></i>
+                    <h4>Henüz Kayıt Yok</h4>
+                    <p>Yaptığınız analizler otomatik olarak burada listelenir.</p>
+                    <a href="/" class="btn btn-primary mt-3">İlk Analizi Yap</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Veri Toplama Aracı - Fikir Madencisi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .collect-card { background: white; padding: 2.5rem; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); width: 100%; max-width: 700px; }
+        .icon-box { width: 70px; height: 70px; background-color: #d1e7dd; color: #0f5132; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 1.5rem auto; }
+        .btn-collect { background-color: #198754; color: white; padding: 12px; font-weight: 600; border-radius: 10px; border: none; transition: 0.3s; }
+        .btn-collect:hover { background-color: #146c43; transform: translateY(-2px); }
+        .form-control { padding: 12px; border-radius: 10px; }
+        .back-link { text-decoration: none; color: #6c757d; font-weight: 500; display: inline-block; margin-top: 20px; }
+        .back-link:hover { color: #000; }
+    </style>
+</head>
+<body>
+
+    <div class="collect-card text-center">
+        <div class="icon-box">
+            <i class="fas fa-spider"></i>
+        </div>
+        <h2 class="fw-bold mb-2">Veri Toplama Aracı</h2>
+        <p class="text-muted mb-4">Model eğitimi için ham veri (yorum) çekin ve havuza ekleyin.</p>
+
+        <!-- Mesaj Gösterimi (Başarı/Hata) -->
+        {% if mesaj %}
+            <div class="alert {{ 'alert-success' if mesaj.tur == 'basari' else 'alert-danger' }} alert-dismissible fade show" role="alert">
+                {% if mesaj.tur == 'basari' %}
+                    <i class="fas fa-check-circle me-2"></i>
+                {% else %}
+                    <i class="fas fa-times-circle me-2"></i>
+                {% endif %}
+                {{ mesaj.icerik }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endif %}
+
+        <form action="/topla" method="post">
+            <div class="mb-4 text-start">
+                <label class="form-label fw-bold small text-uppercase text-muted">Ürün Linki</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0"><i class="fas fa-link text-muted"></i></span>
+                    <input type="text" name="url" class="form-control border-start-0 ps-0" placeholder="Trendyol veya N11 linki..." required>
+                </div>
+            </div>
+            
+            <div class="d-grid">
+                <button type="submit" class="btn btn-collect btn-lg">
+                    <i class="fas fa-download me-2"></i> Verileri Çek ve Kaydet
+                </button>
+            </div>
+        </form>
+
+        <a href="/" class="back-link"><i class="fas fa-arrow-left me-1"></i> Ana Sayfaya Dön</a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
