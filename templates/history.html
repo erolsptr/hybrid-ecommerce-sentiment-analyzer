@@ -3,34 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analiz Geçmişi - Fikir Madencisi</title>
+    <title>Geçmiş - ReviewSense AI</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; padding: 2rem 0; }
-        .container { max-width: 1000px; }
-        .card-history { border: none; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); overflow: hidden; }
-        .card-header { background: white; padding: 1.5rem; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
-        .table-custom th { background-color: #f8f9fa; color: #6c757d; font-weight: 600; text-transform: uppercase; font-size: 0.85rem; border-bottom: 2px solid #eee; padding: 1rem; }
-        .table-custom td { padding: 1rem; vertical-align: middle; color: #495057; border-bottom: 1px solid #f0f0f0; }
-        .table-hover tbody tr:hover { background-color: #fcfcfc; }
-        .btn-view { background-color: #e7f1ff; color: #0d6efd; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; transition: 0.2s; }
-        .btn-view:hover { background-color: #0d6efd; color: white; transform: translateY(-2px); }
-        .badge-engine { font-size: 0.75rem; padding: 5px 10px; border-radius: 6px; }
-        .empty-state { padding: 4rem 2rem; text-align: center; color: #adb5bd; }
-        .back-link { text-decoration: none; color: #6c757d; font-weight: 500; display: inline-flex; align-items: center; transition: 0.2s; }
-        .back-link:hover { color: #0d6efd; transform: translateX(-5px); }
+        body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; padding: 2rem 0; color: #2d3436; }
+        .container { max-width: 1100px; }
+        .card-history { border: none; border-radius: 20px; box-shadow: 0 15px 40px rgba(0,0,0,0.05); overflow: hidden; background: white; }
+        .card-header { background: white; padding: 1.5rem 2rem; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+        .table-custom th { background-color: #fcfcfc; color: #b2bec3; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 1px; border-bottom: 2px solid #f0f0f0; padding: 1.2rem; }
+        .table-custom td { padding: 1.2rem; vertical-align: middle; color: #2d3436; border-bottom: 1px solid #f9f9f9; font-size: 0.95rem; }
+        .table-hover tbody tr:hover { background-color: #f8f9fa; }
         
-        /* Karşılaştırma Butonu Stili */
-        .compare-bar { display: none; position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #2d3748; padding: 15px 30px; border-radius: 50px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); color: white; z-index: 1000; align-items: center; gap: 20px; animation: slideUp 0.3s ease-out; }
+        .badge-engine { font-size: 0.7rem; padding: 5px 10px; border-radius: 6px; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 700; }
+        .back-link { text-decoration: none; color: #636e72; font-weight: 500; display: inline-flex; align-items: center; transition: 0.3s; font-size: 0.9rem; }
+        .back-link:hover { color: #6c5ce7; transform: translateX(-5px); }
+        
+        .compare-bar { display: none; position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #2d3436; padding: 12px 30px; border-radius: 50px; box-shadow: 0 15px 40px rgba(0,0,0,0.2); color: white; z-index: 1000; align-items: center; gap: 20px; animation: slideUp 0.3s ease-out; }
         @keyframes slideUp { from { bottom: -100px; } to { bottom: 30px; } }
-        .btn-compare { background: linear-gradient(90deg, #f35626 0%, #feab3a 100%); border: none; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; }
-        .btn-compare:hover { transform: scale(1.05); }
-        .form-check-input { width: 1.3em; height: 1.3em; cursor: pointer; }
+        .btn-compare { background: linear-gradient(90deg, #6c5ce7, #a29bfe); border: none; color: white; padding: 10px 25px; border-radius: 25px; font-weight: 600; font-size: 0.9rem; transition: 0.3s; }
+        .btn-compare:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(108, 92, 231, 0.4); }
+        
+        .btn-icon { width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid #eee; background: white; color: #636e72; transition: 0.2s; }
+        .btn-icon:hover { background: #f1f2f6; color: #2d3436; }
+        .btn-icon-danger:hover { background: #fff5f5; color: #e17055; border-color: #ffeaa7; }
+        
+        .form-check-input { width: 1.2em; height: 1.2em; cursor: pointer; border-color: #dfe6e9; }
+        .form-check-input:checked { background-color: #6c5ce7; border-color: #6c5ce7; }
     </style>
 </head>
 <body>
-
     <div class="container">
         <div class="mb-4">
             <a href="/" class="back-link"><i class="fas fa-arrow-left me-2"></i> Ana Sayfaya Dön</a>
@@ -38,119 +41,119 @@
 
         <div class="card card-history">
             <div class="card-header">
-                <h3 class="m-0 fw-bold text-dark"><i class="fas fa-history text-primary me-2"></i> Geçmiş Analizler</h3>
-                <span class="badge bg-light text-dark border">{{ gecmis|length }} Kayıt</span>
+                <h4 class="m-0 fw-bold" style="color: #2d3436;">Geçmiş Analizler</h4>
+                <span class="badge bg-light text-secondary border px-3 py-2 rounded-pill">{{ gecmis|length }} Kayıt</span>
             </div>
             
             <div class="card-body p-0">
                 {% if gecmis %}
-                <form action="/karsilastir" method="post" id="compareForm">
-                    <div class="table-responsive">
-                        <table class="table table-custom table-hover m-0">
-                            <thead>
-                                <tr>
-                                    <th width="5%" class="text-center">Seç</th>
-                                    <th width="20%">Tarih</th>
-                                    <th width="45%">Ürün Başlığı</th>
-                                    <th width="15%">Motor</th>
-                                    <th width="15%" class="text-end">İşlem</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for item in gecmis %}
-                                <tr>
-                                    <td class="text-center">
-                                        <input class="form-check-input compare-checkbox" type="checkbox" name="urun_id" value="{{ item.id }}" onchange="checkSelection()">
-                                    </td>
-                                    <td>
-                                        <i class="far fa-clock text-muted me-1"></i> {{ item.tarih }}
-                                    </td>
-                                    <td class="fw-bold">
-                                        {% if item.baslik %}
-                                            {{ item.baslik }}
-                                        {% else %}
-                                            <span class="text-muted fst-italic">Bilinmeyen Ürün</span>
-                                        {% endif %}
-                                        <div class="small mt-1 text-muted" style="font-size: 0.75rem;">
-                                            {{ item.url[:60] }}...
-                                        </div>
-                                    </td>
-                                    <td>
-                                        {% if item.motor == 'gemini' %}
-                                            <span class="badge bg-success bg-opacity-10 text-success badge-engine">GEMINI</span>
-                                        {% elif item.motor == 'llama' %}
-                                            <span class="badge bg-warning bg-opacity-10 text-warning badge-engine" style="color: #d97706!important;">LLAMA 3.3</span>
-                                        {% elif item.motor == 'hibrit' %}
-                                            <span class="badge bg-purple bg-opacity-10 text-primary badge-engine" style="background-color: #f3e8ff; color: #7e22ce;">HIBRIT</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary bg-opacity-10 text-secondary badge-engine">BERT</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        <!-- Tekil Görüntüleme Butonu (Form dışı davranması için type button ve onclick) -->
-                                        <button type="button" class="btn btn-view" onclick="submitSingleView('{{ item.url }}', '{{ item.motor }}')">
-                                            Rapor <i class="fas fa-chevron-right ms-1"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                <div class="table-responsive">
+                    <table class="table table-custom table-hover m-0">
+                        <thead>
+                            <tr>
+                                <th width="5%" class="text-center">Seç</th>
+                                <th width="20%">Tarih</th>
+                                <th width="45%">Ürün</th>
+                                <th width="15%">Motor</th>
+                                <th width="15%" class="text-end">İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in gecmis %}
+                            <tr>
+                                <td class="text-center">
+                                    <input class="form-check-input compare-checkbox" type="checkbox" value="{{ item.id }}" onchange="checkSelection()">
+                                </td>
+                                <td class="text-muted small">
+                                    <i class="far fa-clock me-1"></i> {{ item.tarih }}
+                                </td>
+                                <td>
+                                    <div class="fw-bold">{{ item.baslik if item.baslik else 'Bilinmeyen Ürün' }}</div>
+                                    <div class="text-muted small mt-1 text-truncate" style="max-width: 300px;">
+                                        <i class="fas fa-link me-1"></i> {{ item.url }}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if item.motor == 'llama' %}
+                                        <span class="badge bg-warning bg-opacity-10 text-warning badge-engine" style="color: #d97706!important;">LLAMA 3.3</span>
+                                    {% elif item.motor == 'hibrit' %}
+                                        <span class="badge bg-primary bg-opacity-10 text-primary badge-engine">HIBRIT</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary badge-engine">BERT</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <form action="/sil/{{ item.id }}" method="post" onsubmit="return confirm('Silmek istiyor musunuz?');">
+                                            <button type="submit" class="btn btn-icon btn-icon-danger" title="Sil">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </form>
+                                        <form action="/analiz-et" method="post">
+                                            <input type="hidden" name="url" value="{{ item.url }}">
+                                            <input type="hidden" name="motor" value="{{ item.motor }}">
+                                            <button type="submit" class="btn btn-icon text-primary" title="Raporu Gör">
+                                                <i class="fas fa-chevron-right"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
 
-                    <!-- Alt Tarafta Çıkan Karşılaştırma Çubuğu -->
-                    <div class="compare-bar" id="compareBar">
-                        <span><i class="fas fa-balance-scale"></i> 2 Ürün Seçildi</span>
-                        <button type="submit" class="btn btn-compare">Karşılaştır</button>
-                    </div>
-                </form>
+                <div class="compare-bar" id="compareBar">
+                    <span class="fw-bold"><i class="fas fa-check-circle text-success me-2"></i> 2 Ürün Seçildi</span>
+                    <button type="button" class="btn btn-compare" onclick="submitCompare()">
+                        <i class="fas fa-balance-scale me-2"></i> KARŞILAŞTIR
+                    </button>
+                </div>
                 {% else %}
-                <div class="empty-state">
-                    <i class="fas fa-search fa-3x mb-3"></i>
-                    <h4>Henüz Kayıt Yok</h4>
-                    <p>Yaptığınız analizler otomatik olarak burada listelenir.</p>
-                    <a href="/" class="btn btn-primary mt-3">İlk Analizi Yap</a>
+                <div class="text-center py-5">
+                    <i class="fas fa-ghost fa-3x text-muted mb-3 opacity-25"></i>
+                    <h5 class="text-muted">Henüz hiç analiz yapmadınız.</h5>
+                    <a href="/" class="btn btn-primary mt-3 rounded-pill px-4">Hemen Başla</a>
                 </div>
                 {% endif %}
             </div>
         </div>
     </div>
 
-    <!-- Gizli form: Tekil rapor görüntüleme için -->
+    <!-- GİZLİ FORMLAR -->
     <form id="singleViewForm" action="/analiz-et" method="post" style="display:none;">
-        <input type="hidden" name="url" id="singleUrl">
-        <input type="hidden" name="motor" id="singleMotor">
+        <input type="hidden" name="url" id="singleUrl"><input type="hidden" name="motor" id="singleMotor">
     </form>
+    <form id="hiddenCompareForm" action="/karsilastir" method="post" style="display:none;"></form>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Sadece 2 ürün seçilmesine izin veren ve butonu gösteren script
         function checkSelection() {
             const checkboxes = document.querySelectorAll('.compare-checkbox');
             let checkedCount = 0;
-            
-            checkboxes.forEach(cb => {
-                if (cb.checked) checkedCount++;
-            });
-
+            checkboxes.forEach(cb => { if (cb.checked) checkedCount++; });
             const bar = document.getElementById('compareBar');
-            
             if (checkedCount === 2) {
                 bar.style.display = 'flex';
-                // Diğerlerini disable et
-                checkboxes.forEach(cb => {
-                    if (!cb.checked) cb.disabled = true;
-                });
+                checkboxes.forEach(cb => { if (!cb.checked) cb.disabled = true; });
             } else {
                 bar.style.display = 'none';
-                // Hepsini enable et
-                checkboxes.forEach(cb => {
-                    cb.disabled = false;
-                });
+                checkboxes.forEach(cb => { cb.disabled = false; });
             }
         }
-
-        // Tekil rapor butonuna basınca çalışacak fonksiyon
+        function submitCompare() {
+            const form = document.getElementById('hiddenCompareForm');
+            form.innerHTML = ''; 
+            const checkboxes = document.querySelectorAll('.compare-checkbox:checked');
+            if (checkboxes.length !== 2) { alert("Lütfen 2 ürün seçin."); return; }
+            checkboxes.forEach(cb => {
+                const input = document.createElement('input');
+                input.type = 'hidden'; input.name = 'urun_id'; input.value = cb.value;
+                form.appendChild(input);
+            });
+            form.submit();
+        }
         function submitSingleView(url, motor) {
             document.getElementById('singleUrl').value = url;
             document.getElementById('singleMotor').value = motor;

@@ -22,6 +22,7 @@ from scrapers.trendyol_groq_scraper import cek as trendyol_cek
 from scrapers.trendyol_groq_scraper import analyze_batch_with_groq as analyze_batch_ai, urune_soru_sor
 from scrapers.trendyol_groq_scraper import iki_urunu_kiyasla
 from scrapers.n11_scraper import cek as n11_cek
+from scrapers.hepsiburada_scraper import cek as hepsiburada_cek
 from scrapers.veri_toplayici import topla as veri_toplayici_cek
 
 app = Flask(__name__)
@@ -71,100 +72,120 @@ def kelime_bulutu_olustur(yorumlar_listesi):
         return None
 
 def ana_yorum_cekici(url, motor_tipi):
-    # 1. ADIM: ÖNCE VERİTABANINA BAK
+    # 1. ADIM: TAM EŞLEŞME KONTROLÜ (URL + Motor)
+    # Eğer aynısı varsa direkt getir.
     kayitli_analiz = veritabani.analiz_getir(url, motor_tipi)
     if kayitli_analiz:
         print(f"🚀 Veritabanından getirildi ({motor_tipi}): {kayitli_analiz.get('baslik', 'Bilinmeyen')}")
         return kayitli_analiz
 
-    site_tipi = ""
-    scraper_fonksiyonu = None
+    # 2. ADIM: VERİ TEKRAR KULLANIMI (Reusability)
+    # Eğer bu URL için başka bir motorla (örn: Llama) yapılmış analiz varsa, yorumları oradan çalalım.
+    eski_kayit = veritabani.analiz_getir_genel(url)
+    yorumlar = []
+    urun_basligi = "Bilinmeyen Ürün"
+    veri_kaynagi = "scraper" # Varsayılan: Scraper çalışacak
+
+    if eski_kayit and "analiz_sonucu" in eski_kayit:
+        ham_veri = eski_kayit["analiz_sonucu"]
+        # Ham yorumları bulmaya çalış
+        if "ham_yorumlar" in ham_veri and ham_veri["ham_yorumlar"]:
+            yorumlar = ham_veri["ham_yorumlar"]
+            urun_basligi = eski_kayit.get("baslik", "Ürün")
+            veri_kaynagi = "veritabani"
+            print(f"♻️ Eski analizden {len(yorumlar)} yorum bulundu. Scraper çalışmayacak!")
+        # Eski versiyon uyumluluğu (Eğer ham_yorumlar anahtarı yoksa ama yorumlar varsa)
+        elif "yorumlar" in ham_veri and ham_veri["yorumlar"]:
+            yorumlar = ham_veri["yorumlar"]
+            urun_basligi = eski_kayit.get("baslik", "Ürün")
+            veri_kaynagi = "veritabani"
+            print(f"♻️ Eski analizden {len(yorumlar)} yorum bulundu (V1). Scraper çalışmayacak!")
     
-    if "trendyol.com" in url:
-        site_tipi = "trendyol"; scraper_fonksiyonu = trendyol_cek
-    elif "n11.com" in url:
-        site_tipi = "n11"; scraper_fonksiyonu = n11_cek
-    elif "hepsiburada.com" in url:
-        return [{"hata": "Hepsiburada şu an bakımda. Lütfen Trendyol veya N11 deneyin."}]
-    else:
-        return [{"hata": "Desteklenmeyen site."}]
+    # 3. ADIM: EĞER VERİTABANINDA YOKSA SCRAPER ÇALIŞTIR
+    if veri_kaynagi == "scraper":
+        site_tipi = ""; scraper_fonksiyonu = None
+        if "trendyol.com" in url: site_tipi = "trendyol"; scraper_fonksiyonu = trendyol_cek
+        elif "n11.com" in url: site_tipi = "n11"; scraper_fonksiyonu = n11_cek
+        elif "hepsiburada.com" in url: site_tipi = "hepsiburada"; scraper_fonksiyonu = hepsiburada_cek
+        else: return [{"hata": "Desteklenmeyen site."}]
+        
+        print(f"Selenium WebDriver başlatılıyor ({motor_tipi} motoru - {site_tipi})...")
+        chrome_options = Options()
+        chrome_options.add_argument("--disable-gpu"); chrome_options.add_argument("window-size=1920,1080")
+        chrome_options.add_argument("--no-sandbox"); chrome_options.add_argument("--disable-dev-shm-usage")
+        driver = webdriver.Chrome(service=Service(), options=chrome_options)
+        
+        try:
+            ham_veri_paketi = scraper_fonksiyonu(driver, url, YORUM_LIMITI_ANALIZ)
+            if isinstance(ham_veri_paketi, dict) and "hata" in ham_veri_paketi: return ham_veri_paketi
+            urun_basligi = ham_veri_paketi.get('baslik', 'Bilinmeyen Ürün')
+            yorumlar = ham_veri_paketi.get('yorumlar', [])
+        finally:
+            print("Driver kapatılıyor."); driver.quit()
+
+    if not yorumlar: return {"hata": "Yorum bulunamadı."}
+
+    # 4. ADIM: ANALİZ SÜRECİ
+    analiz_sonucu = {}
+
+    if motor_tipi == 'hibrit':
+        print(f"HİBRİT MOD: {len(yorumlar)} yorum işleniyor...")
+        gemini_icin_hazirlanan_veriler = []
+        bert_tespitleri = []
+        toplam_bert = 0
+        for veri in yorumlar:
+            try:
+                bert_sonucu = analyze_aspects_with_finetuned_model(veri['yorum'])
+                ipucu_metni = ""
+                if bert_sonucu:
+                    ipucu_metni = f" (Yapay Zeka Notu: Bu yorumda şu özellikler tespit edildi: {bert_sonucu})"
+                    # Ham veriyi güncelle ki kaydettiğimizde BERT sonucu da kalsın
+                    veri['bert_analizi'] = bert_sonucu
+                    veri['ozellikler'] = bert_sonucu 
+                    bert_tespitleri.append(veri)
+                    toplam_bert += len(bert_sonucu)
+                gemini_icin_hazirlanan_veriler.append({'puan': veri['puan'], 'yorum': f"{veri['yorum']}{ipucu_metni}"})
+            except: gemini_icin_hazirlanan_veriler.append(veri)
+
+        analiz_sonucu = analyze_batch_ai(gemini_icin_hazirlanan_veriler)
+        if analiz_sonucu:
+            analiz_sonucu["bert_istatistik"] = {"toplam_tespit": toplam_bert, "detay": bert_tespitleri}
+
+    elif motor_tipi == 'llama':
+        print(f"LLAMA MODU: {len(yorumlar)} yorum işleniyor...")
+        analiz_sonucu = analyze_batch_ai(yorumlar)
     
-    print(f"Selenium WebDriver başlatılıyor ({motor_tipi} motoru - {site_tipi})...")
+    else: 
+        # BERT Modu
+        print(f"BERT MODU: {len(yorumlar)} yorum yerel modelle taranıyor...")
+        islenmis_yorumlar = []
+        for veri in yorumlar:
+            try:
+                bert_sonucu = analyze_aspects_with_finetuned_model(veri['yorum'])
+                veri['ozellikler'] = bert_sonucu 
+                islenmis_yorumlar.append(veri)
+            except:
+                islenmis_yorumlar.append(veri)
+        
+        # BERT modunda özet yoktur, sadece zenginleştirilmiş ham yorumlar vardır
+        analiz_sonucu = {"ham_yorumlar": islenmis_yorumlar}
+
+    # Kontrol: Eğer analiz boşsa ve BERT modu değilse hata ver
+    if (motor_tipi != 'bert') and (not analiz_sonucu or not analiz_sonucu.get("konu_analizleri")):
+            print("⚠️ Analiz başarısız oldu, ham veriler gösterilecek.")
+            return list(yorumlar)
+
+    # Paketleme
+    analiz_sonucu["baslik"] = urun_basligi
+    analiz_sonucu["analiz_edilen_yorum_sayisi"] = len(yorumlar)
+    # HAM YORUMLARI SAKLA (Burası Kelime Bulutu ve Gelecek Analizler İçin Kritik)
+    analiz_sonucu["ham_yorumlar"] = yorumlar 
     
-    chrome_options = Options()
-    # chrome_options.add_argument("--headless") 
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("window-size=1920,1080")
-    # macOS ve Linux hatasını önlemek için:
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
+    # 5. ADIM: KAYDETME (ARTIK HER ŞEYİ KAYDEDİYORUZ)
+    # BERT, Llama, Hibrit fark etmez, hepsi kaydedilir.
+    veritabani.analiz_kaydet(url, urun_basligi, motor_tipi, analiz_sonucu)
     
-    driver = webdriver.Chrome(service=Service(), options=chrome_options)
-    
-    try:
-        ham_veri_paketi = scraper_fonksiyonu(driver, url, YORUM_LIMITI_ANALIZ)
-        
-        if isinstance(ham_veri_paketi, dict) and "hata" in ham_veri_paketi: return ham_veri_paketi
-        
-        urun_basligi = ham_veri_paketi.get('baslik', 'Bilinmeyen Ürün')
-        yorumlar = ham_veri_paketi.get('yorumlar', [])
-        
-        if not yorumlar: return {"hata": "Yorum bulunamadı."}
-
-        analiz_sonucu = {}
-
-        if motor_tipi == 'hibrit':
-            print(f"HİBRİT MOD: {len(yorumlar)} yorum işleniyor...")
-            gemini_icin_hazirlanan_veriler = []
-            bert_tespitleri = []
-            toplam_bert = 0
-            
-            print("   -> Adım 1/2: BERT Modeli tarıyor...")
-            for veri in yorumlar:
-                try:
-                    bert_sonucu = analyze_aspects_with_finetuned_model(veri['yorum'])
-                    ipucu_metni = ""
-                    if bert_sonucu:
-                        ipucu_metni = f" (Yapay Zeka Notu: Bu yorumda şu özellikler tespit edildi: {bert_sonucu})"
-                        veri['bert_analizi'] = bert_sonucu
-                        bert_tespitleri.append(veri)
-                        toplam_bert += len(bert_sonucu)
-                    
-                    gemini_icin_hazirlanan_veriler.append({'puan': veri['puan'], 'yorum': f"{veri['yorum']}{ipucu_metni}"})
-                except:
-                    gemini_icin_hazirlanan_veriler.append(veri)
-
-            print("   -> Adım 2/2: Llama 3'e gönderiliyor...")
-            analiz_sonucu = analyze_batch_ai(gemini_icin_hazirlanan_veriler)
-            
-            if analiz_sonucu:
-                analiz_sonucu["bert_istatistik"] = {"toplam_tespit": toplam_bert, "detay": bert_tespitleri}
-
-        elif motor_tipi == 'llama':
-            print(f"LLAMA MODU: {len(yorumlar)} yorum işleniyor...")
-            analiz_sonucu = analyze_batch_ai(yorumlar)
-        
-        else: 
-            analiz_sonucu = {"ham_yorumlar": yorumlar}
-
-        if (motor_tipi != 'bert') and (not analiz_sonucu or not analiz_sonucu.get("konu_analizleri")):
-             print("⚠️ Analiz başarısız oldu, ham veriler gösterilecek.")
-             return list(yorumlar)
-
-        # --- SONUÇ PAKETLEME ---
-        analiz_sonucu["baslik"] = urun_basligi
-        analiz_sonucu["analiz_edilen_yorum_sayisi"] = len(yorumlar)
-        
-        # KRİTİK EKLEME: Ham yorumları pakete ekliyoruz ki Kelime Bulutu çalışsın
-        analiz_sonucu["ham_yorumlar"] = yorumlar 
-        
-        if motor_tipi != 'bert':
-            veritabani.analiz_kaydet(url, urun_basligi, motor_tipi, analiz_sonucu)
-        
-        return analiz_sonucu
-
-    finally:
-        print("Driver kapatılıyor."); driver.quit()
+    return analiz_sonucu
 
 def sadece_veri_cek(url):
     print("Veri toplama modu...")
@@ -255,6 +276,11 @@ def gecmis_sayfasi():
     gecmis_verisi = veritabani.gecmisi_listele()
     return render_template('history.html', gecmis=gecmis_verisi)
 
+@app.route('/sil/<int:id>', methods=['POST'])
+def sil_analiz(id):
+    veritabani.analiz_sil(id)
+    return redirect(url_for('gecmis_sayfasi'))
+
 @app.route('/karsilastir', methods=['POST'])
 def karsilastir():
     ids = request.form.getlist('urun_id')
@@ -285,25 +311,23 @@ def karsilastir():
 @app.route('/sor', methods=['POST'])
 def soru_sor():
     data = request.json
-    url = data.get('url')
-    soru = data.get('soru')
-    motor = data.get('motor', 'hibrit') # Varsayılan hibrit
+    url = data.get('url'); soru = data.get('soru'); motor = data.get('motor', 'hibrit')
+    if not url or not soru: return json.dumps({"cevap": "Hata: Eksik bilgi."})
     
-    if not url or not soru:
-        return json.dumps({"cevap": "Hata: Eksik bilgi."})
-    
-    # Veriyi veritabanından çek (Tekrar analiz yapma!)
+    # 1. Önce tam eşleşme (Motor + URL) ara
     kayit = veritabani.analiz_getir(url, motor)
     
+    # 2. Yoksa genel kayıt ara (Herhangi bir motorla yapılmış mı?)
     if not kayit:
-        return json.dumps({"cevap": "Hata: Önce analiz yapmalısınız."})
-        
+        print("Soru için tam eşleşme bulunamadı, genel kayıt aranıyor...")
+        kayit = veritabani.analiz_getir_genel(url)
+
+    if not kayit: return json.dumps({"cevap": "Hata: Önce analiz yapmalısınız."})
+    
     # Veritabanı verisini aç
     if "analiz_sonucu" in kayit: kayit.update(kayit["analiz_sonucu"])
     
-    # Yapay Zeka Cevabı
     cevap = urune_soru_sor(kayit.get('baslik', 'Ürün'), kayit, soru)
-    
     return json.dumps({"cevap": cevap}, ensure_ascii=False)
 
 @app.route('/topla', methods=['GET', 'POST'])

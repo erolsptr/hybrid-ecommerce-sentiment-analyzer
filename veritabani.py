@@ -105,3 +105,39 @@ def analiz_getir_id_ile(id):
             "url": url
         }
     return None
+def analiz_sil(id):
+    """ID'si verilen analizi veritabanından siler"""
+    try:
+        conn = sqlite3.connect(DB_ADI)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM analiz_gecmisi WHERE id = ?", (id,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Silme hatası: {e}")
+        return False
+    
+def analiz_getir_genel(url):
+    """
+    Motor fark etmeksizin, verilen URL'ye ait en son analizi getirir.
+    Amacı: Ham yorumları tekrar scrape etmeden kullanmak.
+    """
+    conn = sqlite3.connect(DB_ADI)
+    cursor = conn.cursor()
+    # En son eklenen kaydı getir (ORDER BY id DESC LIMIT 1)
+    cursor.execute("SELECT baslik, analiz_sonucu, motor, tarih FROM analiz_gecmisi WHERE url = ? ORDER BY id DESC LIMIT 1", (url,))
+    veri = cursor.fetchone()
+    conn.close()
+    
+    if veri:
+        baslik, sonuc_str, motor, tarih = veri
+        sonuc_json = json.loads(sonuc_str)
+        return {
+            "baslik": baslik,
+            "analiz_sonucu": sonuc_json,
+            "motor": motor,
+            "tarih": tarih,
+            "kaynaktan_geldi": True
+        }
+    return None

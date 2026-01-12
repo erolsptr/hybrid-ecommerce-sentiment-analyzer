@@ -1,129 +1,172 @@
 import time
-import json
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-def veriyi_js_objesinden_cek(driver, cekilen_veriler, limit):
-    print("Sayfa kaynağındaki JavaScript objesi (Sayfa 1 için) aranıyor...")
+def safe_click(driver, element):
+    """Tıklama işlemini garantiye alır (Header engelini aşar)."""
     try:
-        hermes_obj = driver.execute_script("return window.HERMES.YORUMLAR;")
-        state_key = list(hermes_obj.keys())[0]
-        veri = hermes_obj[state_key]['STATE']
-        yorumlar_listesi = veri.get("data", {}).get("userReviews", {}).get("data", {}).get("approvedUserContent", {}).get("approvedUserContentList", [])
-        
-        if not yorumlar_listesi: return 0
-
-        bu_sayfadan_cekilen_sayisi = 0
-        for yorum in yorumlar_listesi:
-            yorum_metni = yorum.get("review", {}).get("content")
-            puan = yorum.get("star")
-
-            if yorum_metni and puan:
-                is_duplicate = any(item['yorum'] == yorum_metni for item in cekilen_veriler)
-                if not is_duplicate:
-                    cekilen_veriler.append({ 'puan': puan, 'yorum': yorum_metni })
-                    bu_sayfadan_cekilen_sayisi += 1
-                if len(cekilen_veriler) >= limit: break
-        return bu_sayfadan_cekilen_sayisi
-    except Exception:
-        return 0
-
-def veriyi_html_den_cek(driver, cekilen_veriler, limit):
-    print("Sayfa HTML'i (Sayfa 2+ için) analiz ediliyor...")
-    try:
-        # --- YENİ ADIM: Yorumların yüklenmesini tetiklemek için kaydır ---
-        print("Yorumların yüklenmesi için sayfa kaydırılıyor...")
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 2);")
-        time.sleep(2)
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
-
-        # Güvenilir hedefleri kullan
-        kart_selector = "div[class*='hermes-ReviewCard-module-']"
-        kart_elementleri = driver.find_elements(By.CSS_SELECTOR, kart_selector)
-        
-        bu_sayfadan_cekilen_sayisi = 0
-
-        for kart in kart_elementleri:
-            try:
-                metin_selector = "span[style='text-align:start']"
-                metin_elementleri = kart.find_elements(By.CSS_SELECTOR, metin_selector)
-                if not metin_elementleri or not metin_elementleri[0].text.strip():
-                    continue
-
-                yorum_metni = metin_elementleri[0].text
-                dolu_yildizlar = kart.find_elements(By.CLASS_NAME, "star")
-                puan = len(dolu_yildizlar)
-
-                if puan > 0 and yorum_metni:
-                    is_duplicate = any(item['yorum'] == yorum_metni for item in cekilen_veriler)
-                    if not is_duplicate:
-                        cekilen_veriler.append({ 'puan': puan, 'yorum': yorum_metni })
-                        bu_sayfadan_cekilen_sayisi += 1
-                    if len(cekilen_veriler) >= limit: break
-            except (StaleElementReferenceException, NoSuchElementException):
-                continue
-        return bu_sayfadan_cekilen_sayisi
-    except Exception:
-        return 0
-
+        # Önce elemente kaydır ve biraz yukarı pay bırak (Sticky header için)
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+        time.sleep(0.5)
+        element.click()
+        return True
+    except:
+        try:
+            # Standart tıklama yemezse Javascript ile tıkla
+            driver.execute_script("arguments[0].click();", element)
+            return True
+        except:
+            return False
 
 def cek(driver, url, limit):
-    print("Hepsiburada Scraper Motoru v17.1 (Düzeltilmiş Hibrit) başlatıldı...")
+    print("Hepsiburada Scraper (v4.0 - Strict Text Only) başlatıldı...")
     cekilen_veriler = []
+    urun_basligi = "Bilinmeyen Hepsiburada Ürünü"
     
     try:
         driver.get(url)
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+        # Sayfanın yüklenmesini bekle
+        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
+        # 1. Çerezleri Kapat
         try:
-            cerez_kabul_butonu = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler")))
-            cerez_kabul_butonu.click(); print("Çerez banner'ı kapatıldı."); time.sleep(1)
-        except (NoSuchElementException, TimeoutException):
-            print("Çerez banner'ı bulunamadı veya zaten kapalı.")
+            cerez = WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler")))
+            cerez.click()
+        except: pass
 
-        if "-yorumlari" not in driver.current_url:
+        # 2. Ürün Başlığını Çek
+        try:
+            # Ürün sayfasındaki başlık (h1)
+            baslik_elementi = driver.find_element(By.CSS_SELECTOR, "h1[data-test-id='title']")
+            urun_basligi = baslik_elementi.text.strip().replace("\n", " ")
+            print(f"Ürün Başlığı: {urun_basligi}")
+        except:
+            # Eğer yorumlar sayfasındaysak başlık farklı yerde olabilir
             try:
-                degerlendirmeler_butonu = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "yPPu6UogPlaotjhx1Qki")))
-                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", degerlendirmeler_butonu)
-                time.sleep(1); degerlendirmeler_butonu.click(); print("Değerlendirmeler sayfasına geçildi.")
-                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "hermes-voltran-comments")))
-            except (NoSuchElementException, TimeoutException):
-                return []
+                baslik_elementi = driver.find_element(By.CSS_SELECTOR, "span[itemprop='name']")
+                urun_basligi = baslik_elementi.text.strip()
+            except: pass
 
-        suanki_sayfa_no = 1
+        # 3. Yorumlar Sekmesine Git (Eğer linkte -yorumlari yoksa)
+        if "-yorumlari" not in driver.current_url:
+            print("Yorumlar sekmesi aranıyor...")
+            try:
+                # 'Değerlendirme' yazan linki bul
+                yorum_linki = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, "//a[contains(@href, '-yorumlari')]"))
+                )
+                safe_click(driver, yorum_linki)
+                time.sleep(3)
+            except Exception as e:
+                print("Yorum butonuna tıklanamadı (Belki zaten sayfadayız).")
+
+        # 4. Yorumların Yüklenmesini Bekle (KRİTİK ADIM)
+        print("Yorumlar yükleniyor...")
+        try:
+            # En az bir tane 'text-align: start' stilinde (metin içeren) span bekle
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//span[contains(@style, 'text-align') and contains(@style, 'start')]"))
+            )
+        except:
+            print("Uyarı: Metin içeren yorum bulunamadı veya sayfa boş.")
+
+        # 5. Yorum Toplama Döngüsü
+        sayfa_no = 1
         
         while len(cekilen_veriler) < limit:
-            print(f"\n--- Sayfa {suanki_sayfa_no} işleniyor ---")
+            print(f"--- Sayfa {sayfa_no} Taranıyor ---")
             
-            if suanki_sayfa_no == 1:
-                bu_sayfadan_cekilen_sayisi = veriyi_js_objesinden_cek(driver, cekilen_veriler, limit)
-            else:
-                bu_sayfadan_cekilen_sayisi = veriyi_html_den_cek(driver, cekilen_veriler, limit)
+            # Sayfayı yavaşça aşağı kaydır (Lazy Load tetiklemek için)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 3);")
+            time.sleep(0.5)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight / 1.5);")
+            time.sleep(0.5)
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
             
-            print(f"Sayfa {suanki_sayfa_no} tamamlandı. Bu sayfadan {bu_sayfadan_cekilen_sayisi} metinli yorum çekildi.")
+            # Kartları Bul (Senin verdiğin sınıf ismini kapsayan geniş seçici)
+            kartlar = driver.find_elements(By.CSS_SELECTOR, "div[class*='hermes-ReviewCard-module']")
+            
+            bu_sayfadan_alinan = 0
+            
+            for kart in kartlar:
+                if len(cekilen_veriler) >= limit: break
+                
+                try:
+                    # Sadece METİN içeren yorumları al
+                    # Senin verdiğin: <span style="text-align: start;">
+                    try:
+                        metin_elementi = kart.find_element(By.CSS_SELECTOR, "span[style*='text-align: start'], span[style*='text-align:start']")
+                        yorum_metni = metin_elementi.text.strip()
+                    except NoSuchElementException:
+                        # Metin yoksa (sadece yıldızsa) bu kartı atla
+                        continue
+                    
+                    if not yorum_metni: continue
 
-            if len(cekilen_veriler) >= limit or (bu_sayfadan_cekilen_sayisi == 0 and suanki_sayfa_no > 1):
+                    # Puanı Çek (Yıldız sayısı)
+                    # Senin verdiğin: <div class="star">...</div>
+                    yildizlar = kart.find_elements(By.CLASS_NAME, "star")
+                    puan = len(yildizlar)
+                    if puan == 0: puan = 5 # Güvenlik
+
+                    # Mükerrer kontrolü
+                    if not any(v['yorum'] == yorum_metni for v in cekilen_veriler):
+                        cekilen_veriler.append({'puan': puan, 'yorum': yorum_metni})
+                        bu_sayfadan_alinan += 1
+
+                except StaleElementReferenceException: continue
+                except Exception: continue
+
+            print(f"Sayfa {sayfa_no} Bitti: {bu_sayfadan_alinan} yeni metinli yorum alındı.")
+
+            # --- KESİN DURMA KURALI ---
+            # Eğer bu sayfayı taradık ama hiç metinli yorum bulamadıysak,
+            # demek ki yorumlar bitti (Sadece puanlamalar kaldı). DUR.
+            if bu_sayfadan_alinan == 0:
+                print("⛔ Bu sayfada metinli yorum yok. İşlem sonlandırılıyor.")
+                break
+
+            if len(cekilen_veriler) >= limit: 
+                print("Hedef limite ulaşıldı.")
                 break
             
-            hedef_sayfa_no = suanki_sayfa_no + 1
+            # Sonraki Sayfaya Geçiş
+            hedef_sayfa = sayfa_no + 1
             try:
-                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                xpath_selector = f"//span[contains(@class, 'hermes-PageHolder-module-mgMeakg82BKyETORtkiQ') and text()='{hedef_sayfa_no}']"
-                sonraki_sayfa_butonu = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, xpath_selector)))
-                sonraki_sayfa_butonu.click()
-                print(f"Sayfa {hedef_sayfa_no}'a geçildi. Yeni sayfanın yüklenmesi bekleniyor...")
-                time.sleep(5)
-                suanki_sayfa_no = hedef_sayfa_no
-            except (NoSuchElementException, TimeoutException):
-                print(f"Sayfa {hedef_sayfa_no} butonu bulunamadı. Son sayfa."); break
+                # Sayfa numarası butonunu bul (Örn: 2, 3)
+                # Senin verdiğin: class="hermes-PageHolder-module..."
+                xpath_pagination = f"//span[contains(@class, 'hermes-PageHolder') and text()='{hedef_sayfa}']"
+                
+                sonraki_sayfa_btn = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, xpath_pagination))
+                )
+                
+                # Butona tıkla
+                if safe_click(driver, sonraki_sayfa_btn):
+                    print(f"Sayfa {hedef_sayfa}'ye geçiliyor...")
+                    time.sleep(3) # Sayfanın yüklenmesi için bekle
+                    sayfa_no += 1
+                else:
+                    print("Sonraki sayfa butonuna tıklanamadı.")
+                    break
+                
+            except TimeoutException:
+                print("Sonraki sayfa butonu bulunamadı (Son sayfa).")
+                break
+            except Exception as e:
+                print(f"Sayfa geçiş hatası: {e}")
+                break
+                
+        print(f"Hepsiburada'dan toplam {len(cekilen_veriler)} yorum çekildi.")
         
-        print(f"Hepsiburada'dan toplam {len(cekilen_veriler)} adet metinli yorum çekildi.")
+        return {
+            "baslik": urun_basligi,
+            "yorumlar": cekilen_veriler
+        }
 
     except Exception as e:
-        print(f"Hepsiburada scraper'da bir hata oluştu: {e}")
-        return [{"puan": 0, "yorum": f"Hata: {e}"}]
-
-    return cekilen_veriler
+        print(f"Hepsiburada Hata: {e}")
+        return {"baslik": urun_basligi, "yorumlar": [], "hata": str(e)}
