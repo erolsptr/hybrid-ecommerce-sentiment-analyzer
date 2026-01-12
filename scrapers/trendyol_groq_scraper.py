@@ -6,12 +6,26 @@ from dotenv import load_dotenv
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
 import concurrent.futures
+import random
 
 # Groq Kütüphanesi
 from groq import Groq
 
 load_dotenv()
 
+keys_string = os.getenv("GROQ_API_KEY")
+# Virgülle ayrılmış birden fazla key varsa listeye çevir, yoksa tek elemanlı liste yap
+API_KEY_POOL = keys_string.split(",") if keys_string else []
+
+def get_random_client():
+    """Havuzdan rastgele bir key seçip Groq istemcisi oluşturur."""
+    if not API_KEY_POOL:
+        print("HATA: Groq API Key bulunamadı.")
+        return None
+    
+    # Rastgele bir key seç
+    selected_key = random.choice(API_KEY_POOL).strip()
+    return Groq(api_key=selected_key)
 # API Key'i al
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=GROQ_API_KEY)
@@ -225,3 +239,177 @@ def cek(driver, url, limit):
     except Exception as e:
         print(f"Hata: {e}")
         return {"baslik": urun_basligi, "yorumlar": [], "hata": str(e)}
+    # ... (Mevcut kodların en altına ekle) ...
+
+# ... (Üstteki kodlar aynı kalsın) ...
+
+def veriyi_ozetle(ham_veri):
+    """
+    Veri paketini istatistiklere ve ÖRNEK YORUMLARA dönüştürür.
+    Böylece AI, detay sorulara cevap verebilir.
+    """
+    if not ham_veri: return {}
+    
+    # Konu bazlı sayıları ve örnekleri çıkar
+    konu_ozeti = {}
+    konular = ham_veri.get('konu_analizleri', [])
+    
+    for k in konular:
+        konu_adi = k.get('konu', 'Diğer')
+        p_list = k.get('pozitif_yorumlar', [])
+        n_list = k.get('negatif_yorumlar', [])
+        
+        p_sayisi = len(p_list)
+        n_sayisi = len(n_list)
+        
+        # Sadece yorum olan konuları al
+        if p_sayisi + n_sayisi > 0:
+            # --- GELİŞTİRME: İlk 3 yorumu örnek olarak alıp metne ekliyoruz ---
+            # Metinleri kısaltarak alalım ki token patlamasın (ilk 100 karakter)
+            p_ornekler = ", ".join([f"'{y[:100]}...'" for y in p_list[:3]])
+            n_ornekler = ", ".join([f"'{y[:100]}...'" for y in n_list[:3]])
+            
+            detay_metni = f"{p_sayisi} Pozitif (Örnekler: {p_ornekler}), {n_sayisi} Negatif (Örnekler: {n_ornekler})"
+            konu_ozeti[konu_adi] = detay_metni
+            
+    return {
+        "urun_adi": ham_veri.get('baslik', 'Bilinmeyen Ürün'),
+        "toplam_yorum": ham_veri.get('analiz_edilen_yorum_sayisi', 0),
+        "konu_detaylari": konu_ozeti
+    }
+
+def iki_urunu_kiyasla(urun1_baslik, urun1_veri, urun2_baslik, urun2_veri):
+    """İki ürünün ÖZET verilerini Llama'ya gönderip kıyaslama ister."""
+    
+    client = get_random_client()
+    if not client: return "API Hatası: Anahtar bulunamadı."
+
+    # --- KRİTİK ADIM: Veriyi küçültüyoruz ---
+    ozet1 = veriyi_ozetle(urun1_veri)
+    ozet2 = veriyi_ozetle(urun2_veri)
+    # ----------------------------------------
+
+    prompt = f"""
+    Sen uzman bir alışveriş asistanısın. Aşağıda iki ürünün istatistiksel analiz verileri var.
+    Yorum metinlerini okumadan, sadece bu sayılara bakarak objektif bir karşılaştırma yap.
+    
+    ÜRÜN 1: {json.dumps(ozet1, ensure_ascii=False)}
+    
+    ÜRÜN 2: {json.dumps(ozet2, ensure_ascii=False)}
+    
+    GÖREV:
+    1. Hangi ürünün hangi konuda (Kargo, Kalite, Fiyat vb.) daha üstün olduğunu belirle.
+    2. Negatif oranlarına dikkat et.
+    3. Sonuç olarak birini öner.
+    
+    ÇIKTI FORMATI (HTML):
+    <div class="analysis-result">
+        <h3>🚀 Karşılaştırma Sonucu</h3>
+        <p>Genel bir giriş cümlesi...</p>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <h5 class="text-success">{urun1_baslik} Avantajları</h5>
+                <ul>
+                    <li>Madde 1...</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h5 class="text-primary">{urun2_baslik} Avantajları</h5>
+                <ul>
+                    <li>Madde 1...</li>
+                </ul>
+            </div>
+        </div>
+        
+        <hr>
+        <div class="alert alert-info">
+            <strong>🏆 Kazanan ve Öneri:</strong> Kimi neden seçmeli?
+        </div>
+    </div>
+    """
+    
+    try:
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=MODEL_NAME, # Llama 3.3
+            temperature=0.7
+        )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        return f"Karşılaştırma yapılamadı: {str(e)}"
+
+# ... (Mevcut kodların en altına ekle) ...
+
+def urune_soru_sor(urun_adi, analiz_verisi, soru):
+    """
+    Kullanıcının sorusunu cevaplarken hem istatistikleri hem de
+    soruyla ilgili spesifik yorumları tarar (Mini-RAG).
+    """
+    client = get_random_client()
+    if not client: return "Hata: API anahtarı bulunamadı."
+
+    ozet_veri = veriyi_ozetle(analiz_verisi)
+    ham_yorumlar = analiz_verisi.get('ham_yorumlar', [])
+    ilgili_yorumlar = []
+    
+    if ham_yorumlar:
+        # --- DÜZELTME 1: Harf Sınırı ---
+        # > 3 yerine >= 3 yaptık. Artık "Ses", "Pil", "Hız" kelimeleri aranacak.
+        anahtar_kelimeler = [k.lower() for k in soru.split() if len(k) >= 3]
+        
+        # Eğer soru çok kısaysa (örn: "pil?") ve hiç kelime kalmadıysa, soruyu olduğu gibi al
+        if not anahtar_kelimeler and soru:
+            anahtar_kelimeler = [soru.lower()]
+
+        for yorum_obj in ham_yorumlar:
+            yorum_metni = yorum_obj.get('yorum', '') if isinstance(yorum_obj, dict) else str(yorum_obj)
+            yorum_metni_kucuk = yorum_metni.lower()
+            
+            if any(k in yorum_metni_kucuk for k in anahtar_kelimeler):
+                ilgili_yorumlar.append(f"- {yorum_metni}")
+    
+    # --- DÜZELTME 2: Limit Artırımı ---
+    # 15 az geliyordu, 50 yapalım. Llama 3.1 8b'nin hafızası (context window) geniştir, kaldırır.
+    limit = 50
+    if len(ilgili_yorumlar) > limit:
+        # Rastgele 50 tane seç ki hep aynıları gelmesin
+        import random
+        ilgili_yorumlar = random.sample(ilgili_yorumlar, limit)
+        
+    ilgili_yorumlar_metni = "\n".join(ilgili_yorumlar) if ilgili_yorumlar else "Bu konuyla ilgili özel bir yorum bulunamadı."
+
+    prompt = f"""
+    Sen samimi, yardımsever ve profesyonel bir alışveriş asistanısın.
+    Aşağıda bu ürünle ilgili istatistikler ve kullanıcı yorumlarından örnekler var.
+    
+    ÜRÜN: {urun_adi}
+    
+    VERİ KAYNAKLARI:
+    1. GENEL İSTATİSTİKLER:
+    {json.dumps(ozet_veri, ensure_ascii=False)}
+    
+    2. SORUYLA EŞLEŞEN YORUMLAR (Kanıtlar):
+    {ilgili_yorumlar_metni}
+    
+    KULLANICI SORUSU: {soru}
+    
+    GÖREV:
+    Kullanıcının sorusuna, elindeki verileri inceleyerek cevap ver.
+    
+    KURALLAR:
+    1. ASLA "Kullanıcının sorduğu soru şudur" veya "Analiz edelim" gibi robotik girişler yapma.
+    2. Direkt konuya gir: "Sizin için yorumları inceledim ve..." veya "Bu konuda kullanıcılar genellikle..." gibi başla.
+    3. Cevabın sohbet havasında olsun ama verilere dayalı olsun.
+    4. Eğer yorumlarda bilgi yoksa dürüstçe "Yorumlarda bu detaya değinilmemiş" de.
+    """
+        
+    try:
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.1-8b-instant",
+            temperature=0.5
+        )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        return f"Üzgünüm, şu an cevap veremiyorum. Hata: {str(e)}"

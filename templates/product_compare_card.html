@@ -1,0 +1,45 @@
+<!-- Hesaplamalar -->
+{% set ns = namespace(pos=0, neg=0) %}
+{% for item in u.konu_analizleri %}
+    {% set ns.pos = ns.pos + item.pozitif_yorumlar|length %}
+    {% set ns.neg = ns.neg + item.negatif_yorumlar|length %}
+{% endfor %}
+{% set total = ns.pos + ns.neg %}
+{% set score = ((ns.pos / total) * 100)|round|int if total > 0 else 50 %}
+
+<div class="card product-card position-relative">
+    <div class="card-body text-center p-4">
+        <h5 class="card-title fw-bold mb-3" style="min-height: 50px;">{{ u.baslik }}</h5>
+        
+        <div class="score-box mb-2" style="color: {{ '#198754' if score >= 75 else '#fd7e14' if score >= 50 else '#dc3545' }}">
+            {{ score }}<span style="font-size: 1.5rem;">/100</span>
+        </div>
+        <p class="text-muted small">{{ u.analiz_edilen_yorum_sayisi }} yorum baz alındı</p>
+
+        <hr>
+
+        <div class="text-start">
+            <h6 class="text-success fw-bold"><i class="fas fa-thumbs-up"></i> Güçlü Yönler</h6>
+            <ul class="list-unstyled feature-list mb-4">
+                {% for item in u.konu_analizleri|sort(attribute='pozitif_yorumlar', reverse=True) %}
+                    {% if loop.index <= 3 and item.pozitif_yorumlar|length > (item.negatif_yorumlar|length * 1.2) %}
+                        <li>{{ item.konu }} <span class="float-end badge bg-success rounded-pill">{{ item.pozitif_yorumlar|length }}</span></li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+
+            <h6 class="text-danger fw-bold"><i class="fas fa-thumbs-down"></i> Zayıf Yönler</h6>
+            <ul class="list-unstyled feature-list">
+                {% for item in u.konu_analizleri|sort(attribute='negatif_yorumlar', reverse=True) %}
+                    {% if loop.index <= 3 and item.negatif_yorumlar|length >= item.pozitif_yorumlar|length and item.negatif_yorumlar|length > 0 %}
+                        <li>{{ item.konu }} <span class="float-end badge bg-danger rounded-pill">{{ item.negatif_yorumlar|length }}</span></li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    
+    <div class="card-footer bg-white text-center border-0 pb-3">
+        <a href="{{ u.url }}" target="_blank" class="btn btn-sm btn-outline-primary w-100">Ürüne Git</a>
+    </div>
+</div>

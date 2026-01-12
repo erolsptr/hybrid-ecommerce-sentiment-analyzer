@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; padding-bottom: 3rem; }
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; padding-bottom: 5rem; }
         .header-section { background: white; padding: 2rem 0; border-bottom: 1px solid #eee; margin-bottom: 2rem; }
         .score-circle { width: 150px; height: 150px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 auto; color: white; font-weight: bold; box-shadow: 0 10px 20px rgba(0,0,0,0.15); transition: transform 0.3s; }
         .score-circle:hover { transform: scale(1.05); }
@@ -16,21 +16,62 @@
         .score-label { font-size: 0.9rem; opacity: 0.9; }
         .card-custom { border: none; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); height: 100%; transition: 0.3s; }
         .card-custom:hover { box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
-        .list-group-item { border: none; padding: 0.8rem 1rem; }
-        .badge-pos { background-color: #d1e7dd; color: #0f5132; }
-        .badge-neg { background-color: #f8d7da; color: #842029; }
+        
+        /* LİSTE HİZALAMA DÜZELTMESİ */
+        .list-group-item { 
+            border: none; 
+            padding: 0.8rem 1rem; 
+            display: flex; /* Flexbox aktif */
+            justify-content: space-between; /* İki uca yasla */
+            align-items: center; /* Dikeyde tam ortala */
+        }
+        
         .accordion-button:not(.collapsed) { background-color: #e7f1ff; color: #0c63e4; }
         .source-badge { position: absolute; top: 20px; right: 20px; background: #fff3cd; color: #856404; padding: 5px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 1px solid #ffeeba; }
         .review-text-pos { border-left: 4px solid #198754; background: #f9fdfa; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 0.95rem; }
         .review-text-neg { border-left: 4px solid #dc3545; background: #fff8f8; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 0.95rem; }
         .back-btn { position: fixed; bottom: 20px; right: 20px; z-index: 99; border-radius: 50px; padding: 10px 25px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
-        
-        /* Yeni BERT Paneli Stilleri */
         .bert-scroll-table { max-height: 350px; overflow-y: auto; scrollbar-width: thin; }
         .bert-badge { font-size: 0.8rem; padding: 5px 8px; border-radius: 6px; }
+
+        /* FLOATING CHAT DÜZELTMESİ (Z-INDEX ARTIRILDI) */
+        .chat-btn-float { 
+            position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; border-radius: 50%; 
+            background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); color: white; 
+            display: flex; align-items: center; justify-content: center; font-size: 24px; 
+            box-shadow: 0 5px 20px rgba(13, 110, 253, 0.4); cursor: pointer; 
+            z-index: 10000; /* En üstte durması için çok yüksek değer */
+            transition: transform 0.3s; border: none; 
+        }
+        .chat-btn-float:hover { transform: scale(1.1); }
+        
+        .chat-window { 
+            position: fixed; bottom: 100px; right: 30px; width: 350px; max-height: 500px; 
+            background: white; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
+            z-index: 10001; /* Butondan da üstte */
+            display: none; flex-direction: column; overflow: hidden; border: 1px solid #eee; 
+            animation: slideUp 0.3s ease-out; 
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .chat-header { background: #0d6efd; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+        .chat-body { padding: 15px; overflow-y: auto; max-height: 350px; background: #f8f9fa; flex-grow: 1; font-size: 0.95rem; }
+        .chat-input-area { padding: 10px; background: white; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        .chat-response { background: #e7f1ff; padding: 10px; border-radius: 10px; margin-top: 10px; border-left: 3px solid #0d6efd; color: #333; }
+
+        @media print {
+            .chat-btn-float, .chat-window, .btn-action, .source-badge { display: none !important; }
+            body { background-color: white !important; padding: 0 !important; }
+            .container { max-width: 100% !important; width: 100% !important; padding: 0 !important; margin: 0 !important; }
+            .card { border: 1px solid #ddd !important; box-shadow: none !important; break-inside: avoid; }
+            .header-section { padding: 1rem 0 !important; border-bottom: 2px solid #333 !important; }
+            a { text-decoration: none !important; color: black !important; }
+            .accordion-collapse { display: block !important; }
+        }
     </style>
 </head>
 <body>
+    <input type="hidden" id="pageUrl" value="{{ request.form.get('url') or sonuclar.url or '' }}">
 
     <!-- HATA YÖNETİMİ -->
     {% if hata %}
@@ -47,6 +88,15 @@
     <!-- ÜST BİLGİ ALANI -->
     <div class="header-section text-center position-relative">
         <div class="container">
+            <div class="position-absolute top-0 start-0 mt-3 ms-3 d-flex gap-2">
+                <a href="/" class="btn btn-outline-primary btn-sm btn-action">
+                    <i class="fas fa-search me-1"></i> Yeni Analiz
+                </a>
+                <button onclick="window.print()" class="btn btn-outline-dark btn-sm btn-action">
+                    <i class="fas fa-file-pdf me-1"></i> PDF İndir
+                </button>
+            </div>
+
             {% if sonuclar.kaynaktan_geldi %}
                 <div class="source-badge"><i class="fas fa-database"></i> Veritabanından Yüklendi</div>
             {% endif %}
@@ -63,10 +113,8 @@
 
     <div class="container">
         
-        <!-- GEMINI / HIBRIT MODU GÖRÜNÜMÜ -->
         {% if motor == 'llama' or motor == 'hibrit' %}
             
-            <!-- Hesaplama Mantığı -->
             {% set ns = namespace(pos=0, neg=0) %}
             {% for item in sonuclar.konu_analizleri %}
                 {% if (item.pozitif_yorumlar|length + item.negatif_yorumlar|length) > 0 %}
@@ -77,9 +125,8 @@
             {% set total = ns.pos + ns.neg %}
             {% set score = ((ns.pos / total) * 100)|round|int if total > 0 else 50 %}
 
-<!-- SKOR VE ÖZET KARTLARI -->
+            <!-- SKOR KARTLARI -->
             <div class="row g-4 mb-5">
-                <!-- 1. SKOR KARTI -->
                 <div class="col-md-4 d-flex justify-content-center align-items-center">
                     <div class="score-circle" style="background: linear-gradient(135deg, {{ '#198754' if score >= 70 else '#ffc107' if score >= 50 else '#dc3545' }} 0%, {{ '#146c43' if score >= 70 else '#e0a800' if score >= 50 else '#b02a37' }} 100%);">
                         <span class="score-val">{{ score }}</span>
@@ -87,110 +134,89 @@
                     </div>
                 </div>
                 
-                <!-- 2. ARTILAR KARTI -->
                 <div class="col-md-4">
                     <div class="card card-custom h-100">
-                        <div class="card-header bg-white fw-bold text-success border-0 pb-0">
-                            <i class="fas fa-thumbs-up"></i> Öne Çıkan Artılar
-                        </div>
+                        <div class="card-header bg-white fw-bold text-success border-0 pb-0"><i class="fas fa-thumbs-up"></i> Öne Çıkan Artılar</div>
                         <div class="card-body">
                             <ul class="list-group list-group-flush">
-                                <!-- Sayacı sıfırla -->
                                 {% set ns_pros = namespace(count=0) %}
-                                <!-- Pozitif sayısına göre sırala -->
                                 {% for item in sonuclar.konu_analizleri|sort(attribute='pozitif_yorumlar', reverse=True) %}
-                                    <!-- KURAL: Pozitif > Negatif VE Gösterilen Sayı < 3 -->
-                                    <!-- EK KURAL: Pozitif, Negatifin en az 1.2 katı olmalı (45 vs 42 durumunu engeller) -->
                                     {% if ns_pros.count < 3 and item.pozitif_yorumlar|length > (item.negatif_yorumlar|length * 1.1) %}
-                                        <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
-                                            <span><i class="fas fa-check text-success me-2"></i>{{ item.konu }}</span>
-                                            <span class="badge bg-success rounded-pill">{{ item.pozitif_yorumlar|length }}</span>
+                                        <!-- HİZALAMA DÜZELTİLDİ: d-flex ve align-items-center ile -->
+                                        <li class="list-group-item bg-transparent">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-check text-success me-2"></i>
+                                                <span class="fw-medium">{{ item.konu }}</span>
+                                            </div>
+                                            <span class="badge bg-success rounded-pill ms-2">{{ item.pozitif_yorumlar|length }}</span>
                                         </li>
                                         {% set ns_pros.count = ns_pros.count + 1 %}
                                     {% endif %}
                                 {% endfor %}
-                                
-                                {% if ns_pros.count == 0 %}
-                                    <li class="list-group-item bg-transparent text-muted fst-italic small">Belirgin bir artı özellik bulunamadı.</li>
-                                {% endif %}
+                                {% if ns_pros.count == 0 %}<li class="list-group-item bg-transparent text-muted small">Belirgin bir artı özellik bulunamadı.</li>{% endif %}
                             </ul>
                         </div>
                     </div>
                 </div>
 
-                <!-- 3. EKSİLER KARTI -->
                 <div class="col-md-4">
                     <div class="card card-custom h-100">
-                        <div class="card-header bg-white fw-bold text-danger border-0 pb-0">
-                            <i class="fas fa-thumbs-down"></i> Dikkat Çeken Eksiler
-                        </div>
+                        <div class="card-header bg-white fw-bold text-danger border-0 pb-0"><i class="fas fa-thumbs-down"></i> Dikkat Çeken Eksiler</div>
                         <div class="card-body">
                             <ul class="list-group list-group-flush">
-                                <!-- Sayacı sıfırla -->
                                 {% set ns_cons = namespace(count=0) %}
-                                <!-- Negatif sayısına göre sırala -->
                                 {% for item in sonuclar.konu_analizleri|sort(attribute='negatif_yorumlar', reverse=True) %}
-                                    <!-- KURAL: Negatif >= Pozitif VE Gösterilen Sayı < 3 VE En az 1 negatif yorum var -->
                                     {% if ns_cons.count < 3 and item.negatif_yorumlar|length >= item.pozitif_yorumlar|length and item.negatif_yorumlar|length > 0 %}
-                                        <li class="list-group-item bg-transparent d-flex justify-content-between align-items-center">
-                                            <span><i class="fas fa-times text-danger me-2"></i>{{ item.konu }}</span>
-                                            <span class="badge bg-danger rounded-pill">{{ item.negatif_yorumlar|length }}</span>
+                                        <!-- HİZALAMA DÜZELTİLDİ -->
+                                        <li class="list-group-item bg-transparent">
+                                            <div class="d-flex align-items-center">
+                                                <i class="fas fa-times text-danger me-2"></i>
+                                                <span class="fw-medium">{{ item.konu }}</span>
+                                            </div>
+                                            <span class="badge bg-danger rounded-pill ms-2">{{ item.negatif_yorumlar|length }}</span>
                                         </li>
                                         {% set ns_cons.count = ns_cons.count + 1 %}
                                     {% endif %}
                                 {% endfor %}
-
-                                {% if ns_cons.count == 0 %}
-                                    <li class="list-group-item bg-transparent text-muted fst-italic small">Belirgin bir şikayet bulunamadı.</li>
-                                {% endif %}
+                                {% if ns_cons.count == 0 %}<li class="list-group-item bg-transparent text-muted small">Belirgin bir şikayet bulunamadı.</li>{% endif %}
                             </ul>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- GRAFİK BÖLÜMÜ -->
-            <div class="card card-custom mb-5 p-3">
-                <h5 class="card-title text-center mb-4">Konu Bazlı Duygu Dağılımı</h5>
+            <!-- GRAFİK -->
+            <div class="card card-custom mb-4 p-3">
+                <h5 class="card-title text-center mb-4 fw-bold">Konu Bazlı Duygu Dağılımı</h5>
                 <canvas id="sentimentChart" style="max-height: 400px;"></canvas>
             </div>
 
-            <!-- DETAYLI ANALİZ (AKORDEON) -->
+            {% if kelime_bulutu %}
+            <div class="card card-custom mb-5 p-3 border-0 shadow-sm bg-light" style="max-width: 700px; margin: 0 auto;">
+                <h6 class="card-title text-center mb-2 fw-bold text-muted small text-uppercase"><i class="fas fa-cloud text-secondary me-1"></i> Müşterilerin Sık Kullandığı Kelimeler</h6>
+                <div class="text-center"><img src="data:image/png;base64,{{ kelime_bulutu }}" class="img-fluid rounded" alt="Kelime Bulutu" style="max-height: 250px; width: auto; opacity: 0.85;"></div>
+            </div>
+            {% endif %}
+
+            <!-- DETAYLI ANALİZ -->
             <h3 class="mb-4"><i class="fas fa-list-ul"></i> Detaylı Konu Analizi</h3>
             <div class="accordion mb-5" id="accordionPanelsStayOpenExample">
                 {% for item in sonuclar.konu_analizleri %}
-                    {% set pos_count = item.pozitif_yorumlar|length %}
-                    {% set neg_count = item.negatif_yorumlar|length %}
-                    {% if pos_count + neg_count > 0 %}
+                    {% if (item.pozitif_yorumlar|length + item.negatif_yorumlar|length) > 0 %}
                     <div class="accordion-item shadow-sm mb-3 border-0 rounded overflow-hidden">
                         <h2 class="accordion-header">
                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ loop.index }}">
                                 <div class="d-flex w-100 justify-content-between align-items-center me-3">
                                     <span class="fw-bold">{{ item.konu }}</span>
-                                    <div>
-                                        {% if pos_count > 0 %}<span class="badge bg-success me-1">{{ pos_count }} Pozitif</span>{% endif %}
-                                        {% if neg_count > 0 %}<span class="badge bg-danger">{{ neg_count }} Negatif</span>{% endif %}
-                                    </div>
+                                    <div><span class="badge bg-success me-1">{{ item.pozitif_yorumlar|length }} P</span><span class="badge bg-danger">{{ item.negatif_yorumlar|length }} N</span></div>
                                 </div>
                             </button>
                         </h2>
-                        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#accordionPanelsStayOpenExample">
+                        <div id="collapse{{ loop.index }}" class="accordion-collapse collapse">
                             <div class="accordion-body bg-light">
                                 <div class="row">
-                                    <div class="col-md-6">
-                                        <h6 class="text-success fw-bold">Olumlu Görüşler</h6>
-                                        {% if pos_count == 0 %}<small class="text-muted">Bu konuda olumlu yorum yok.</small>{% endif %}
-                                        {% for yorum in item.pozitif_yorumlar %}
-                                            <div class="review-text-pos"><i class="fas fa-quote-left text-success opacity-25 me-2"></i>{{ yorum }}</div>
-                                        {% endfor %}
-                                    </div>
-                                    <div class="col-md-6 mt-3 mt-md-0">
-                                        <h6 class="text-danger fw-bold">Olumsuz Görüşler</h6>
-                                        {% if neg_count == 0 %}<small class="text-muted">Bu konuda şikayet yok.</small>{% endif %}
-                                        {% for yorum in item.negatif_yorumlar %}
-                                            <div class="review-text-neg"><i class="fas fa-quote-left text-danger opacity-25 me-2"></i>{{ yorum }}</div>
-                                        {% endfor %}
-                                    </div>
+                                    <div class="col-md-6"><h6 class="text-success fw-bold">Olumlu Görüşler</h6>{% for yorum in item.pozitif_yorumlar %}<div class="review-text-pos">{{ yorum }}</div>{% endfor %}</div>
+                                    <div class="col-md-6 mt-3 mt-md-0"><h6 class="text-danger fw-bold">Olumsuz Görüşler</h6>{% for yorum in item.negatif_yorumlar %}<div class="review-text-neg">{{ yorum }}</div>{% endfor %}</div>
                                 </div>
                             </div>
                         </div>
@@ -199,7 +225,7 @@
                 {% endfor %}
             </div>
 
-            <!-- YENİ: BERT KANIT PANELİ (Sadece Hibrit Modda ve BERT veri bulduysa görünür) -->
+            <!-- BERT KANIT PANELİ -->
             {% if motor == 'hibrit' and sonuclar.bert_istatistik %}
             <div class="card card-custom mb-5 border-2 border-primary">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
@@ -209,30 +235,15 @@
                 <div class="card-body">
                     <div class="alert alert-light border-start border-4 border-primary">
                         <i class="fas fa-info-circle text-primary me-2"></i>
-Aşağıdaki liste, yorumlar bulut <strong>(Llama 3.3)</strong> sistemine gönderilmeden <strong>önce</strong>, kendi eğittiğimiz yerel BERT modeli tarafından analiz edilmiştir.
+                        Aşağıdaki liste, yorumlar bulut <strong>(Llama 3.3)</strong> sistemine gönderilmeden <strong>önce</strong>, kendi eğittiğimiz yerel BERT modeli tarafından analiz edilmiştir.
                         Bu tespitler, Llama modeline "ipucu" olarak sunulmuş ve sonuçların doğruluğu artırılmıştır.
                     </div>
-                    
                     <div class="bert-scroll-table">
                         <table class="table table-striped table-hover align-middle">
-                            <thead class="table-dark sticky-top">
-                                <tr>
-                                    <th width="70%">Orijinal Yorum Metni</th>
-                                    <th width="30%">BERT Tespiti</th>
-                                </tr>
-                            </thead>
+                            <thead class="table-dark sticky-top"><tr><th width="70%">Orijinal Yorum Metni</th><th width="30%">BERT Tespiti</th></tr></thead>
                             <tbody>
                                 {% for veri in sonuclar.bert_istatistik.detay %}
-                                <tr>
-                                    <td class="small text-muted fst-italic">"{{ veri.yorum }}"</td>
-                                    <td>
-                                        {% for konu, duygu in veri.bert_analizi.items() %}
-                                            <span class="badge bert-badge {{ 'bg-success' if duygu == 'Pozitif' else 'bg-danger' if duygu == 'Negatif' else 'bg-secondary' }} mb-1">
-                                                {{ konu }} ({{ duygu }})
-                                            </span>
-                                        {% endfor %}
-                                    </td>
-                                </tr>
+                                <tr><td class="small text-muted fst-italic">"{{ veri.yorum }}"</td><td>{% for k, d in veri.bert_analizi.items() %}<span class="badge bert-badge {{ 'bg-success' if d == 'Pozitif' else 'bg-danger' if d == 'Negatif' else 'bg-secondary' }} mb-1">{{ k }} ({{ d }})</span>{% endfor %}</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -240,69 +251,95 @@ Aşağıdaki liste, yorumlar bulut <strong>(Llama 3.3)</strong> sistemine gönde
                 </div>
             </div>
             {% endif %}
-            <!-- BERT KANIT PANELİ SONU -->
+
+            <!-- FLOATING CHAT WIDGET -->
+            <button class="chat-btn-float" onclick="toggleChat()">
+                <i class="fas fa-comments"></i>
+            </button>
+
+            <div class="chat-window" id="chatWindow">
+                <div class="chat-header">
+                    <span><i class="fas fa-robot me-2"></i> Ürün Asistanı</span>
+                    <button type="button" class="btn-close btn-close-white" onclick="toggleChat()"></button>
+                </div>
+                <div class="chat-body" id="chatBody">
+                    <div class="text-center text-muted mt-3">
+                        <i class="fas fa-info-circle mb-2"></i><br>
+                        Bu ürünle ilgili merak ettiğiniz bir şey var mı?<br>
+                        <small>Örn: "Kamerası nasıl?", "Şarjı ne kadar gidiyor?"</small>
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" class="form-control" placeholder="Sorunuzu yazın...">
+                    <button class="btn btn-primary" onclick="soruSor()"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
 
             <script>
-                const labels = [];
-                const dataPos = [];
-                const dataNeg = [];
+                // GRAFİK
+                const labels = []; const dataPos = []; const dataNeg = [];
+                {% for item in sonuclar.konu_analizleri %}{% if (item.pozitif_yorumlar|length + item.negatif_yorumlar|length) > 0 %}
+                    labels.push("{{ item.konu }}"); dataPos.push({{ item.pozitif_yorumlar|length }}); dataNeg.push({{ item.negatif_yorumlar|length }});
+                {% endif %}{% endfor %}
+                new Chart(document.getElementById('sentimentChart').getContext('2d'), { type: 'bar', data: { labels: labels, datasets: [{ label: 'Pozitif', data: dataPos, backgroundColor: 'rgba(25, 135, 84, 0.7)' }, { label: 'Negatif', data: dataNeg, backgroundColor: 'rgba(220, 53, 69, 0.7)' }] }, options: { indexAxis: 'y', responsive: true, scales: { x: { stacked: true }, y: { stacked: true } } } });
 
-                {% for item in sonuclar.konu_analizleri %}
-                    {% if (item.pozitif_yorumlar|length + item.negatif_yorumlar|length) > 0 %}
-                        labels.push("{{ item.konu }}");
-                        dataPos.push({{ item.pozitif_yorumlar|length }});
-                        dataNeg.push({{ item.negatif_yorumlar|length }});
-                    {% endif %}
-                {% endfor %}
+                function toggleChat() {
+                    const win = document.getElementById('chatWindow');
+                    if (win.style.display === 'flex') win.style.display = 'none';
+                    else { win.style.display = 'flex'; document.getElementById('chatInput').focus(); }
+                }
 
-                const ctx = document.getElementById('sentimentChart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            { label: 'Pozitif', data: dataPos, backgroundColor: 'rgba(25, 135, 84, 0.7)', borderRadius: 5 },
-                            { label: 'Negatif', data: dataNeg, backgroundColor: 'rgba(220, 53, 69, 0.7)', borderRadius: 5 }
-                        ]
-                    },
-                    options: {
-                        indexAxis: 'y',
-                        responsive: true,
-                        scales: { x: { stacked: true }, y: { stacked: true } },
-                        plugins: { legend: { position: 'top' } }
-                    }
+                function soruSor() {
+                    const input = document.getElementById('chatInput');
+                    const soru = input.value.trim();
+                    const chatBody = document.getElementById('chatBody');
+                    
+                    if (!soru) return;
+
+                    chatBody.innerHTML += `<div class="text-end mb-2"><span class="badge bg-primary text-wrap text-start p-2" style="max-width: 80%; font-size: 0.9rem;">${soru}</span></div>`;
+                    input.value = '';
+                    
+                    const loadingId = 'loading-' + Date.now();
+                    chatBody.innerHTML += `<div class="text-start mb-2" id="${loadingId}"><span class="badge bg-light text-dark border p-2"><i class="fas fa-spinner fa-spin"></i> Yazıyor...</span></div>`;
+                    chatBody.scrollTop = chatBody.scrollHeight;
+
+                    const currentUrl = document.getElementById('pageUrl').value;
+                    
+                    fetch('/sor', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: currentUrl, soru: soru, motor: "{{ motor }}" })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById(loadingId).remove();
+                        chatBody.innerHTML += `<div class="chat-response mb-2"><strong><i class="fas fa-magic"></i> AI:</strong> ${data.cevap}</div>`;
+                        chatBody.scrollTop = chatBody.scrollHeight;
+                    })
+                    .catch(error => {
+                        document.getElementById(loadingId).remove();
+                        chatBody.innerHTML += `<div class="text-danger small">Hata oluştu.</div>`;
+                    });
+                }
+
+                document.getElementById("chatInput").addEventListener("keypress", function(event) {
+                    if (event.key === "Enter") { event.preventDefault(); soruSor(); }
                 });
             </script>
 
-        <!-- BERT / HAM VERİ MODU GÖRÜNÜMÜ -->
         {% else %}
-            <div class="alert alert-info shadow-sm">
-                <i class="fas fa-info-circle"></i> Bu modda (BERT/Ham) yapay zeka özeti yerine, tek tek yorum analizi gösterilmektedir.
-            </div>
-            
+            <!-- BERT MODU -->
             <div class="row">
-                {% set ham_liste = sonuclar.ham_yorumlar if sonuclar.ham_yorumlar is defined else (sonuclar.yorumlar if sonuclar.yorumlar is defined else sonuclar) %}
-                
-                {% for veri in ham_liste %}
+                {% for veri in sonuclar.ham_yorumlar %}
                 <div class="col-md-6 mb-3">
                     <div class="card card-custom h-100 p-3">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span class="badge bg-primary">
-                                {% for i in range(veri.puan|int) %}★{% endfor %}
-                            </span>
-                        </div>
+                        <span class="badge bg-primary mb-2">{% for i in range(veri.puan|int) %}★{% endfor %}</span>
                         <p class="mb-2 text-muted fst-italic">"{{ veri.yorum }}"</p>
-                        
                         {% if veri.ozellikler %}
                             <div class="mt-2 pt-2 border-top">
-                                <small class="fw-bold text-secondary">BERT Tespiti:</small>
-                                <div class="mt-1">
-                                    {% for ozellik, duygu in veri.ozellikler.items() %}
-                                        <span class="badge {{ 'bg-success' if duygu == 'Pozitif' else 'bg-danger' if duygu == 'Negatif' else 'bg-secondary' }} me-1">
-                                            {{ ozellik }}: {{ duygu }}
-                                        </span>
-                                    {% endfor %}
-                                </div>
+                                {% for k, d in veri.ozellikler.items() %}
+                                    <span class="badge {{ 'bg-success' if d=='Pozitif' else 'bg-danger' }}">{{ k }}</span>
+                                {% endfor %}
                             </div>
                         {% endif %}
                     </div>
@@ -310,14 +347,8 @@ Aşağıdaki liste, yorumlar bulut <strong>(Llama 3.3)</strong> sistemine gönde
                 {% endfor %}
             </div>
         {% endif %}
-
-        <a href="/" class="btn btn-primary btn-lg back-btn">
-            <i class="fas fa-search"></i> Yeni Analiz
-        </a>
-
     </div>
     {% endif %}
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

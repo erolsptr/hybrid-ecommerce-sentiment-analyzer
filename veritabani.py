@@ -8,10 +8,12 @@ def veritabani_baslat():
     """Veritabanı tablosunu oluşturur (Eğer yoksa)"""
     conn = sqlite3.connect(DB_ADI)
     cursor = conn.cursor()
+    # DİKKAT: url sütunundan UNIQUE ifadesini kaldırdık.
+    # Artık aynı url'den birden fazla kayıt olabilir (farklı motorlar için)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS analiz_gecmisi (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT UNIQUE,
+            url TEXT, 
             baslik TEXT,
             motor TEXT,
             analiz_sonucu TEXT,
@@ -27,12 +29,11 @@ def analiz_kaydet(url, baslik, motor, sonuc_json):
         conn = sqlite3.connect(DB_ADI)
         cursor = conn.cursor()
         
-        # JSON verisini string'e çeviriyoruz ki veritabanına metin olarak sığsın
         sonuc_str = json.dumps(sonuc_json, ensure_ascii=False)
         tarih = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Eğer bu URL daha önce varsa, eskisini silip yenisini yazalım (Update mantığı)
-        cursor.execute("DELETE FROM analiz_gecmisi WHERE url = ?", (url,))
+        # Sadece o URL ve o MOTOR tipindeki eski kaydı sil (Update mantığı)
+        cursor.execute("DELETE FROM analiz_gecmisi WHERE url = ? AND motor = ?", (url, motor))
         
         cursor.execute('''
             INSERT INTO analiz_gecmisi (url, baslik, motor, analiz_sonucu, tarih)
@@ -41,28 +42,28 @@ def analiz_kaydet(url, baslik, motor, sonuc_json):
         
         conn.commit()
         conn.close()
-        print(f"✅ Veritabanına kaydedildi: {baslik}")
+        print(f"✅ Veritabanına kaydedildi ({motor}): {baslik}")
     except Exception as e:
         print(f"❌ Veritabanı kayıt hatası: {e}")
 
-def analiz_getir(url):
-    """Verilen URL veritabanında varsa sonucunu döndürür"""
+def analiz_getir(url, motor):
+    """Verilen URL ve MOTOR tipi için kayıt varsa getirir"""
     conn = sqlite3.connect(DB_ADI)
     cursor = conn.cursor()
-    cursor.execute("SELECT baslik, analiz_sonucu, motor, tarih FROM analiz_gecmisi WHERE url = ?", (url,))
+    # Sorguya motor şartını da ekledik
+    cursor.execute("SELECT baslik, analiz_sonucu, motor, tarih FROM analiz_gecmisi WHERE url = ? AND motor = ?", (url, motor))
     veri = cursor.fetchone()
     conn.close()
     
     if veri:
-        # Veritabanından gelen string'i tekrar JSON (sözlük) formatına çevir
-        baslik, sonuc_str, motor, tarih = veri
+        baslik, sonuc_str, motor_db, tarih = veri
         sonuc_json = json.loads(sonuc_str)
         return {
             "baslik": baslik,
             "analiz_sonucu": sonuc_json,
-            "motor": motor,
+            "motor": motor_db,
             "tarih": tarih,
-            "kaynaktan_geldi": True # Bu bayrak sayesinde front-end'de "Veritabanından Yüklendi" diyebiliriz
+            "kaynaktan_geldi": True
         }
     return None
 
@@ -84,3 +85,23 @@ def gecmisi_listele():
             "tarih": v[4]
         })
     return liste
+def analiz_getir_id_ile(id):
+    """ID'si verilen analizi getirir (Karşılaştırma için)"""
+    conn = sqlite3.connect(DB_ADI)
+    cursor = conn.cursor()
+    cursor.execute("SELECT baslik, analiz_sonucu, motor, tarih, url FROM analiz_gecmisi WHERE id = ?", (id,))
+    veri = cursor.fetchone()
+    conn.close()
+    
+    if veri:
+        baslik, sonuc_str, motor, tarih, url = veri
+        sonuc_json = json.loads(sonuc_str)
+        return {
+            "id": id,
+            "baslik": baslik,
+            "analiz_sonucu": sonuc_json,
+            "motor": motor,
+            "tarih": tarih,
+            "url": url
+        }
+    return None

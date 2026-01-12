@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analiz Geçmişi - Fikir Madencisi</title>
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- FontAwesome İkonları -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; padding: 2rem 0; }
@@ -16,12 +14,19 @@
         .table-custom th { background-color: #f8f9fa; color: #6c757d; font-weight: 600; text-transform: uppercase; font-size: 0.85rem; border-bottom: 2px solid #eee; padding: 1rem; }
         .table-custom td { padding: 1rem; vertical-align: middle; color: #495057; border-bottom: 1px solid #f0f0f0; }
         .table-hover tbody tr:hover { background-color: #fcfcfc; }
-        .btn-view { background-color: #e7f1ff; color: #0d6efd; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; transition: 0.2s; }
+        .btn-view { background-color: #e7f1ff; color: #0d6efd; border: none; padding: 6px 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; transition: 0.2s; }
         .btn-view:hover { background-color: #0d6efd; color: white; transform: translateY(-2px); }
         .badge-engine { font-size: 0.75rem; padding: 5px 10px; border-radius: 6px; }
         .empty-state { padding: 4rem 2rem; text-align: center; color: #adb5bd; }
         .back-link { text-decoration: none; color: #6c757d; font-weight: 500; display: inline-flex; align-items: center; transition: 0.2s; }
         .back-link:hover { color: #0d6efd; transform: translateX(-5px); }
+        
+        /* Karşılaştırma Butonu Stili */
+        .compare-bar { display: none; position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #2d3748; padding: 15px 30px; border-radius: 50px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); color: white; z-index: 1000; align-items: center; gap: 20px; animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { bottom: -100px; } to { bottom: 30px; } }
+        .btn-compare { background: linear-gradient(90deg, #f35626 0%, #feab3a 100%); border: none; color: white; padding: 8px 20px; border-radius: 20px; font-weight: bold; }
+        .btn-compare:hover { transform: scale(1.05); }
+        .form-check-input { width: 1.3em; height: 1.3em; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -39,60 +44,66 @@
             
             <div class="card-body p-0">
                 {% if gecmis %}
-                <div class="table-responsive">
-                    <table class="table table-custom table-hover m-0">
-                        <thead>
-                            <tr>
-                                <th width="20%">Tarih</th>
-                                <th width="50%">Ürün Başlığı</th>
-                                <th width="15%">Motor</th>
-                                <th width="15%" class="text-end">İşlem</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in gecmis %}
-                            <tr>
-                                <td>
-                                    <i class="far fa-clock text-muted me-1"></i> {{ item.tarih }}
-                                </td>
-                                <td class="fw-bold">
-                                    {% if item.baslik %}
-                                        {{ item.baslik }}
-                                    {% else %}
-                                        <span class="text-muted fst-italic">Bilinmeyen Ürün</span>
-                                    {% endif %}
-                                    
-                                    <!-- URL Linki (Opsiyonel küçük link) -->
-                                    <div class="small mt-1">
-                                        <a href="{{ item.url }}" target="_blank" class="text-decoration-none text-muted" style="font-size: 0.75rem;">
-                                            <i class="fas fa-external-link-alt"></i> Ürüne Git
-                                        </a>
-                                    </div>
-                                </td>
-                                <td>
-{% if item.motor == 'llama' %}
-    <span class="badge bg-warning bg-opacity-10 text-warning badge-engine" style="color: #d97706!important;">LLAMA 3.3</span>
-                                    {% elif item.motor == 'hibrit' %}
-                                        <span class="badge bg-purple bg-opacity-10 text-primary badge-engine" style="background-color: #f3e8ff; color: #7e22ce;">HIBRIT</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary bg-opacity-10 text-secondary badge-engine">BERT</span>
-                                    {% endif %}
-                                </td>
-                                <td class="text-end">
-                                    <!-- Form ile tekrar POST atıyoruz (Cache'den getirmesi için) -->
-                                    <form action="/analiz-et" method="post">
-                                        <input type="hidden" name="url" value="{{ item.url }}">
-                                        <input type="hidden" name="motor" value="{{ item.motor }}">
-                                        <button type="submit" class="btn btn-view">
-                                            Raporu Aç <i class="fas fa-chevron-right ms-1"></i>
+                <form action="/karsilastir" method="post" id="compareForm">
+                    <div class="table-responsive">
+                        <table class="table table-custom table-hover m-0">
+                            <thead>
+                                <tr>
+                                    <th width="5%" class="text-center">Seç</th>
+                                    <th width="20%">Tarih</th>
+                                    <th width="45%">Ürün Başlığı</th>
+                                    <th width="15%">Motor</th>
+                                    <th width="15%" class="text-end">İşlem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in gecmis %}
+                                <tr>
+                                    <td class="text-center">
+                                        <input class="form-check-input compare-checkbox" type="checkbox" name="urun_id" value="{{ item.id }}" onchange="checkSelection()">
+                                    </td>
+                                    <td>
+                                        <i class="far fa-clock text-muted me-1"></i> {{ item.tarih }}
+                                    </td>
+                                    <td class="fw-bold">
+                                        {% if item.baslik %}
+                                            {{ item.baslik }}
+                                        {% else %}
+                                            <span class="text-muted fst-italic">Bilinmeyen Ürün</span>
+                                        {% endif %}
+                                        <div class="small mt-1 text-muted" style="font-size: 0.75rem;">
+                                            {{ item.url[:60] }}...
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if item.motor == 'gemini' %}
+                                            <span class="badge bg-success bg-opacity-10 text-success badge-engine">GEMINI</span>
+                                        {% elif item.motor == 'llama' %}
+                                            <span class="badge bg-warning bg-opacity-10 text-warning badge-engine" style="color: #d97706!important;">LLAMA 3.3</span>
+                                        {% elif item.motor == 'hibrit' %}
+                                            <span class="badge bg-purple bg-opacity-10 text-primary badge-engine" style="background-color: #f3e8ff; color: #7e22ce;">HIBRIT</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary badge-engine">BERT</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <!-- Tekil Görüntüleme Butonu (Form dışı davranması için type button ve onclick) -->
+                                        <button type="button" class="btn btn-view" onclick="submitSingleView('{{ item.url }}', '{{ item.motor }}')">
+                                            Rapor <i class="fas fa-chevron-right ms-1"></i>
                                         </button>
-                                    </form>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Alt Tarafta Çıkan Karşılaştırma Çubuğu -->
+                    <div class="compare-bar" id="compareBar">
+                        <span><i class="fas fa-balance-scale"></i> 2 Ürün Seçildi</span>
+                        <button type="submit" class="btn btn-compare">Karşılaştır</button>
+                    </div>
+                </form>
                 {% else %}
                 <div class="empty-state">
                     <i class="fas fa-search fa-3x mb-3"></i>
@@ -105,6 +116,46 @@
         </div>
     </div>
 
+    <!-- Gizli form: Tekil rapor görüntüleme için -->
+    <form id="singleViewForm" action="/analiz-et" method="post" style="display:none;">
+        <input type="hidden" name="url" id="singleUrl">
+        <input type="hidden" name="motor" id="singleMotor">
+    </form>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Sadece 2 ürün seçilmesine izin veren ve butonu gösteren script
+        function checkSelection() {
+            const checkboxes = document.querySelectorAll('.compare-checkbox');
+            let checkedCount = 0;
+            
+            checkboxes.forEach(cb => {
+                if (cb.checked) checkedCount++;
+            });
+
+            const bar = document.getElementById('compareBar');
+            
+            if (checkedCount === 2) {
+                bar.style.display = 'flex';
+                // Diğerlerini disable et
+                checkboxes.forEach(cb => {
+                    if (!cb.checked) cb.disabled = true;
+                });
+            } else {
+                bar.style.display = 'none';
+                // Hepsini enable et
+                checkboxes.forEach(cb => {
+                    cb.disabled = false;
+                });
+            }
+        }
+
+        // Tekil rapor butonuna basınca çalışacak fonksiyon
+        function submitSingleView(url, motor) {
+            document.getElementById('singleUrl').value = url;
+            document.getElementById('singleMotor').value = motor;
+            document.getElementById('singleViewForm').submit();
+        }
+    </script>
 </body>
 </html>
