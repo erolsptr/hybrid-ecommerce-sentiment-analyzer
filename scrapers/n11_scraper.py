@@ -22,7 +22,6 @@ def cek(driver, url, limit):
         driver.get(url)
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-        # --- GÜNCELLENEN BAŞLIK ÇEKME ALANI ---
         baslik_bulundu = False
         # 1. Deneme: Ürün Sayfası (h1.title)
         try:

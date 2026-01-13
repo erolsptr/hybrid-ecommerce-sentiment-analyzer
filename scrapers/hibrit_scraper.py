@@ -51,7 +51,6 @@ def cek(driver, url, limit):
                 yorum_metni = yorum_metni_elementi[0].text
                 if not yorum_metni or yorum_metni in cekilen_yorum_metinleri: continue
 
-                # --- YAZIM HATASI DÜZELTİLDİ ---
                 devamini_oku_buton = kart.find_elements(By.CLASS_NAME, "read-more")
                 if devamini_oku_buton:
                     driver.execute_script("arguments[0].click();", devamini_oku_buton[0]); time.sleep(0.5)
@@ -81,7 +80,6 @@ def cek(driver, url, limit):
         # BERT analiz sonuçlarını da içeren bir "yorum listesi" oluştur
         gemini_girdisi_listesi = []
         for y in cekilen_veriler:
-            # Gemini'ye gönderilecek metni daha zengin hale getiriyoruz
             gonderilecek_yorum = f"Yorum: {y['yorum']} (İpucu: Bu yorumdaki potansiyel konular ve duyguları bir ast analist şöyle buldu: {y['bert_on_analiz']})"
             gemini_girdisi_listesi.append({'puan': y['puan'], 'yorum': gonderilecek_yorum})
             

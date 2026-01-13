@@ -8,7 +8,6 @@ def veritabani_baslat():
     """Veritabanı tablosunu oluşturur (Eğer yoksa)"""
     conn = sqlite3.connect(DB_ADI)
     cursor = conn.cursor()
-    # DİKKAT: url sütunundan UNIQUE ifadesini kaldırdık.
     # Artık aynı url'den birden fazla kayıt olabilir (farklı motorlar için)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS analiz_gecmisi (
@@ -32,7 +31,7 @@ def analiz_kaydet(url, baslik, motor, sonuc_json):
         sonuc_str = json.dumps(sonuc_json, ensure_ascii=False)
         tarih = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Sadece o URL ve o MOTOR tipindeki eski kaydı sil (Update mantığı)
+        # Sadece o URL ve o MOTOR tipindeki eski kaydı sil
         cursor.execute("DELETE FROM analiz_gecmisi WHERE url = ? AND motor = ?", (url, motor))
         
         cursor.execute('''
@@ -125,7 +124,7 @@ def analiz_getir_genel(url):
     """
     conn = sqlite3.connect(DB_ADI)
     cursor = conn.cursor()
-    # En son eklenen kaydı getir (ORDER BY id DESC LIMIT 1)
+    # En son eklenen kaydı getir
     cursor.execute("SELECT baslik, analiz_sonucu, motor, tarih FROM analiz_gecmisi WHERE url = ? ORDER BY id DESC LIMIT 1", (url,))
     veri = cursor.fetchone()
     conn.close()

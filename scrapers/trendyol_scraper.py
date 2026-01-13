@@ -33,7 +33,7 @@ def find_true_aspects(text):
     valid_aspects = [
         "kargo", "paket", "paketleme", "teslimat", "satıcı", "mağaza", "hız",
         "kalite", "malzeme", "kumaş", "dikiş", "beden", "kalıp", "renk", "boyut", "ebat",
-        "ses", "gürültü", "tiz", "mikrofon", "şarj", "pil", "batarya", "kablo", # "bas" çıkarıldı
+        "ses", "gürültü", "tiz", "mikrofon", "şarj", "pil", "batarya", "kablo",
         "ekran", "görüntü", "kamera", "fotoğraf", "video", "hafıza", "işlemci", "donanım",
         "kurulum", "montaj", "parça", "vida", "kutu", "ambalaj", "kapak", "kılıf",
         "tat", "lezzet", "koku", "tazelik", "kıvam", 
@@ -109,8 +109,7 @@ def analyze_aspects_with_finetuned_model(text):
             
             # 2. Heuristics (Kural Bazlı Düzeltmeler)
             
-            # Negatif Kelime Listesi (Genişletilmiş)
-            # "keşke", "özensiz", "ezilmiş" gibi kelimeler eklendi.
+            # Negatif Kelime Listesi
             neg_keywords = [
                 "kırık", "bozuk", "kötü", "berbat", "rezalet", "iade", "sorun", "yavaş", 
                 "beğenmedim", "defolu", "çizik", "leke", "ince", "naylon", "sentetik", 
@@ -126,14 +125,8 @@ def analyze_aspects_with_finetuned_model(text):
                 if is_negated: 
                     duygu = "Pozitif"
                 else: 
-                    # --- DÜZELTME: Negatif kelime varsa ve olumsuzlanmıyorsa, sonuç KESİN Negatiftir.
-                    # BERT pozitif dese bile (örneğin cümledeki "güzel" kelimesine kanıp) biz Negatif yaparız.
                     duygu = "Negatif"
             
-            # --- DÜZELTME: "Pozitif Zorlama" (Positive Override) Kaldırıldı ---
-            # Eskiden burada "Eğer harika kelimesi varsa Negatifi Pozitif yap" diyen kod vardı.
-            # Onu sildik. Çünkü "Ürün harika ama kargo kırık" cümlesinde kargo negatiftir.
-            # "Harika" kelimesi kargoyu kurtarmamalı.
 
             clean_aspect = aspect.capitalize()
             analysis_results[clean_aspect] = duygu

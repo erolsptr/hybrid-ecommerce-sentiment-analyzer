@@ -156,7 +156,6 @@ def cek(driver, url, limit):
         try: driver.find_element(By.CLASS_NAME, "onboarding__default-renderer-primary-button").click(); time.sleep(1)
         except: pass
 
-        # --- GÜNCELLENEN BAŞLIK ÇEKME ALANI ---
         baslik_bulundu = False
         # 1. Deneme: Ürün Sayfası Başlığı
         try:
@@ -166,7 +165,7 @@ def cek(driver, url, limit):
             baslik_bulundu = True
         except: pass
         
-        # 2. Deneme: Yorumlar Sayfası Başlığı (Senin verdiğin selector)
+        # 2. Deneme: Yorumlar Sayfası Başlığı
         if not baslik_bulundu:
             try:
                 baslik_elementi = driver.find_element(By.CLASS_NAME, "info-title-text")
@@ -175,7 +174,7 @@ def cek(driver, url, limit):
                 baslik_bulundu = True
             except: pass
             
-        # 3. Deneme: Eski Yöntemler (Fallback)
+        # 3. Deneme: Eski Yöntemler
         if not baslik_bulundu:
             try:
                 marka = driver.find_element(By.CLASS_NAME, "pr-new-br").text

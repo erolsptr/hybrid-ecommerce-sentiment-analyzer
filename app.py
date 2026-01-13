@@ -1,6 +1,5 @@
 from flask import Flask, request, render_template, redirect, url_for
 from selenium import webdriver
-# Service importu kalsın ama webdriver_manager'a gerek yok artık
 from selenium.webdriver.chrome.service import Service 
 from selenium.webdriver.chrome.options import Options
 import json
@@ -49,7 +48,7 @@ def kelime_bulutu_olustur(yorumlar_listesi):
             width=800, height=400,
             background_color='white',
             stopwords=stopwords,
-            colormap='viridis', # Renk teması
+            colormap='viridis',
             min_font_size=10
         ).generate(tum_metin)
         
@@ -79,12 +78,12 @@ def ana_yorum_cekici(url, motor_tipi):
         print(f"🚀 Veritabanından getirildi ({motor_tipi}): {kayitli_analiz.get('baslik', 'Bilinmeyen')}")
         return kayitli_analiz
 
-    # 2. ADIM: VERİ TEKRAR KULLANIMI (Reusability)
-    # Eğer bu URL için başka bir motorla (örn: Llama) yapılmış analiz varsa, yorumları oradan çalalım.
+    # 2. ADIM: VERİ TEKRAR KULLANIMI
+    # Eğer bu URL için başka bir motorla (örn: Llama) yapılmış analiz varsa, yorumları oradan getir.
     eski_kayit = veritabani.analiz_getir_genel(url)
     yorumlar = []
     urun_basligi = "Bilinmeyen Ürün"
-    veri_kaynagi = "scraper" # Varsayılan: Scraper çalışacak
+    veri_kaynagi = "scraper" 
 
     if eski_kayit and "analiz_sonucu" in eski_kayit:
         ham_veri = eski_kayit["analiz_sonucu"]
@@ -178,10 +177,10 @@ def ana_yorum_cekici(url, motor_tipi):
     # Paketleme
     analiz_sonucu["baslik"] = urun_basligi
     analiz_sonucu["analiz_edilen_yorum_sayisi"] = len(yorumlar)
-    # HAM YORUMLARI SAKLA (Burası Kelime Bulutu ve Gelecek Analizler İçin Kritik)
+    # HAM YORUMLARI SAKLA
     analiz_sonucu["ham_yorumlar"] = yorumlar 
     
-    # 5. ADIM: KAYDETME (ARTIK HER ŞEYİ KAYDEDİYORUZ)
+    # 5. ADIM: KAYDETME 
     # BERT, Llama, Hibrit fark etmez, hepsi kaydedilir.
     veritabani.analiz_kaydet(url, urun_basligi, motor_tipi, analiz_sonucu)
     
@@ -254,15 +253,14 @@ def analiz_et():
     if isinstance(sonuclar, dict) and sonuclar.get("kaynaktan_geldi") and "analiz_sonucu" in sonuclar:
         sonuclar.update(sonuclar["analiz_sonucu"])
         
-    # 4. Kelime Bulutu Oluşturma (YENİ KISIM)
+    # 4. Kelime Bulutu Oluşturma
     kelime_bulutu = None
     ham_yorumlar = []
     
-    # Yorum listesini bul (Veri yapısına göre değişebilir)
+    # Yorum listesini bul 
     if isinstance(sonuclar, list):
         ham_yorumlar = sonuclar
     elif isinstance(sonuclar, dict):
-        # 'ham_yorumlar' anahtarı artık kesinlikle var
         ham_yorumlar = sonuclar.get('ham_yorumlar', sonuclar.get('yorumlar', []))
     
     if ham_yorumlar:

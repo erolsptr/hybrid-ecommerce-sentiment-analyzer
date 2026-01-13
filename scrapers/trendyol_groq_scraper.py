@@ -8,7 +8,6 @@ from selenium.common.exceptions import NoSuchElementException
 import concurrent.futures
 import random
 
-# Groq Kütüphanesi
 from groq import Groq
 
 load_dotenv()
@@ -30,9 +29,6 @@ def get_random_client():
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- GÜNCELLEME: Model İsmi Değiştirildi ---
-# Eski (Kapanan): llama3-70b-8192
-# Yeni (Aktif): llama-3.3-70b-versatile
 MODEL_NAME = "llama-3.3-70b-versatile" 
 BATCH_SIZE = 75
 
@@ -143,7 +139,6 @@ def analyze_batch_with_groq(yorum_listesi):
     
     all_results = []
     
-    # GROQ ÇOK HIZLI OLDUĞU İÇİN PARALEL GÖNDEREBİLİRİZ
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         future_to_batch = {executor.submit(call_groq_api, batch): i for i, batch in enumerate(batches)}
         
@@ -239,9 +234,7 @@ def cek(driver, url, limit):
     except Exception as e:
         print(f"Hata: {e}")
         return {"baslik": urun_basligi, "yorumlar": [], "hata": str(e)}
-    # ... (Mevcut kodların en altına ekle) ...
 
-# ... (Üstteki kodlar aynı kalsın) ...
 
 def veriyi_ozetle(ham_veri):
     """
@@ -264,7 +257,6 @@ def veriyi_ozetle(ham_veri):
         
         # Sadece yorum olan konuları al
         if p_sayisi + n_sayisi > 0:
-            # --- GELİŞTİRME: İlk 3 yorumu örnek olarak alıp metne ekliyoruz ---
             # Metinleri kısaltarak alalım ki token patlamasın (ilk 100 karakter)
             p_ornekler = ", ".join([f"'{y[:100]}...'" for y in p_list[:3]])
             n_ornekler = ", ".join([f"'{y[:100]}...'" for y in n_list[:3]])
@@ -339,7 +331,6 @@ def iki_urunu_kiyasla(urun1_baslik, urun1_veri, urun2_baslik, urun2_veri):
     except Exception as e:
         return f"Karşılaştırma yapılamadı: {str(e)}"
 
-# ... (Mevcut kodların en altına ekle) ...
 
 def urune_soru_sor(urun_adi, analiz_verisi, soru):
     """
@@ -354,7 +345,6 @@ def urune_soru_sor(urun_adi, analiz_verisi, soru):
     ilgili_yorumlar = []
     
     if ham_yorumlar:
-        # --- DÜZELTME 1: Harf Sınırı ---
         # > 3 yerine >= 3 yaptık. Artık "Ses", "Pil", "Hız" kelimeleri aranacak.
         anahtar_kelimeler = [k.lower() for k in soru.split() if len(k) >= 3]
         
@@ -369,11 +359,8 @@ def urune_soru_sor(urun_adi, analiz_verisi, soru):
             if any(k in yorum_metni_kucuk for k in anahtar_kelimeler):
                 ilgili_yorumlar.append(f"- {yorum_metni}")
     
-    # --- DÜZELTME 2: Limit Artırımı ---
-    # 15 az geliyordu, 50 yapalım. Llama 3.1 8b'nin hafızası (context window) geniştir, kaldırır.
     limit = 50
     if len(ilgili_yorumlar) > limit:
-        # Rastgele 50 tane seç ki hep aynıları gelmesin
         import random
         ilgili_yorumlar = random.sample(ilgili_yorumlar, limit)
         

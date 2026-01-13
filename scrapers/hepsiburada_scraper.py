@@ -7,14 +7,14 @@ from selenium.webdriver.support import expected_conditions as EC
 def safe_click(driver, element):
     """Tıklama işlemini garantiye alır (Header engelini aşar)."""
     try:
-        # Önce elemente kaydır ve biraz yukarı pay bırak (Sticky header için)
+        # Önce elemente kaydır ve biraz yukarı pay bırak
         driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
         time.sleep(0.5)
         element.click()
         return True
     except:
         try:
-            # Standart tıklama yemezse Javascript ile tıkla
+            # Standart tıklama olmazsa Javascript ile tıkla
             driver.execute_script("arguments[0].click();", element)
             return True
         except:
@@ -86,7 +86,7 @@ def cek(driver, url, limit):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(1)
             
-            # Kartları Bul (Senin verdiğin sınıf ismini kapsayan geniş seçici)
+            # Kartları Bul
             kartlar = driver.find_elements(By.CSS_SELECTOR, "div[class*='hermes-ReviewCard-module']")
             
             bu_sayfadan_alinan = 0
@@ -96,7 +96,6 @@ def cek(driver, url, limit):
                 
                 try:
                     # Sadece METİN içeren yorumları al
-                    # Senin verdiğin: <span style="text-align: start;">
                     try:
                         metin_elementi = kart.find_element(By.CSS_SELECTOR, "span[style*='text-align: start'], span[style*='text-align:start']")
                         yorum_metni = metin_elementi.text.strip()
@@ -107,7 +106,6 @@ def cek(driver, url, limit):
                     if not yorum_metni: continue
 
                     # Puanı Çek (Yıldız sayısı)
-                    # Senin verdiğin: <div class="star">...</div>
                     yildizlar = kart.find_elements(By.CLASS_NAME, "star")
                     puan = len(yildizlar)
                     if puan == 0: puan = 5 # Güvenlik
@@ -123,8 +121,6 @@ def cek(driver, url, limit):
             print(f"Sayfa {sayfa_no} Bitti: {bu_sayfadan_alinan} yeni metinli yorum alındı.")
 
             # --- KESİN DURMA KURALI ---
-            # Eğer bu sayfayı taradık ama hiç metinli yorum bulamadıysak,
-            # demek ki yorumlar bitti (Sadece puanlamalar kaldı). DUR.
             if bu_sayfadan_alinan == 0:
                 print("⛔ Bu sayfada metinli yorum yok. İşlem sonlandırılıyor.")
                 break
@@ -136,8 +132,7 @@ def cek(driver, url, limit):
             # Sonraki Sayfaya Geçiş
             hedef_sayfa = sayfa_no + 1
             try:
-                # Sayfa numarası butonunu bul (Örn: 2, 3)
-                # Senin verdiğin: class="hermes-PageHolder-module..."
+                # Sayfa numarası butonunu bul
                 xpath_pagination = f"//span[contains(@class, 'hermes-PageHolder') and text()='{hedef_sayfa}']"
                 
                 sonraki_sayfa_btn = WebDriverWait(driver, 5).until(
